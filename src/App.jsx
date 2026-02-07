@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// PASTE YOUR "BANK" WALLET ADDRESS HERE BETWEEN THE QUOTES
+// !!! IMPORTANT: PASTE YOUR WALLET ADDRESS HERE AGAIN !!!
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
@@ -152,12 +152,11 @@ function GameContent() {
     setShowEntryModal(false);
   };
 
-  // --- REAL DEPOSIT LOGIC ---
+  // --- REAL DEPOSIT LOGIC (UPDATED FOR STABILITY) ---
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return alert("Enter valid amount");
     
-    // Check if House Wallet is set
     if (HOUSE_WALLET_ADDRESS === "REPLACE_WITH_YOUR_WALLET_ADDRESS") {
        return alert("DEV ERROR: Please set the HOUSE_WALLET_ADDRESS in App.jsx code!");
     }
@@ -167,8 +166,15 @@ function GameContent() {
         const amountSOL = parseFloat(depositAmount);
         const housePubkey = new PublicKey(HOUSE_WALLET_ADDRESS);
 
-        // 1. Create Transaction
-        const transaction = new Transaction().add(
+        // 1. Get latest blockhash (The "Ticket" for the transaction)
+        const latestBlockhash = await connection.getLatestBlockhash();
+
+        // 2. Create Transaction
+        const transaction = new Transaction({
+            feePayer: publicKey,
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+        }).add(
             SystemProgram.transfer({
                 fromPubkey: publicKey,
                 toPubkey: housePubkey,
@@ -176,20 +182,22 @@ function GameContent() {
             })
         );
 
-        // 2. Send & Confirm
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = publicKey;
-
+        // 3. Send & Confirm (The "Modern" Way)
         const signature = await sendTransaction(transaction, connection);
         
-        // Wait for confirmation
-        await connection.confirmTransaction(signature, 'processed');
+        console.log("Sent! Signature:", signature);
+        
+        // Wait for confirmation using the new strategy
+        await connection.confirmTransaction({
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+            signature: signature
+        }, 'confirmed');
 
-        // 3. Update UI Balance
+        // 4. Update UI Balance
         setVaultBalance(prev => prev + amountSOL);
         setDepositAmount('');
-        alert(`Success! Deposited ${amountSOL} SOL. Tx: ${signature.slice(0,8)}...`);
+        alert(`Success! Deposited ${amountSOL} SOL. Your Streak Vault is funded!`);
 
     } catch (error) {
         console.error("Deposit Error:", error);
@@ -200,7 +208,6 @@ function GameContent() {
   };
 
   const handleWithdraw = () => {
-    // WITHDRAW IS HARDER - NEEDS BACKEND API. (We will do this next)
     alert("Withdrawals require the API backend (Coming in Step 7!)");
   };
 
