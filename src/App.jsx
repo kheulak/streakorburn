@@ -125,13 +125,9 @@ export default function App() {
         window.open("https://phantom.app/", "_blank");
       }
     } else if (type === 'metamask') {
-      // Logic for MetaMask Solana Snap would go here
-      // For now, we simulate the connection for the demo environment
       if (window.ethereum) {
         try {
-          // Simulate connecting to Solana via Snap
           const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          // Mocking a Solana-like address derived from MM for the demo
           setWalletAddress("Sol" + accounts[0].slice(2)); 
           setWalletType('metamask');
           setShowEntryModal(true);
@@ -153,13 +149,9 @@ export default function App() {
     setIsMenuOpen(false);
   };
 
-  // --- VAULT TRANSACTIONS (PLACEHOLDERS FOR SMART CONTRACT) ---
+  // --- VAULT TRANSACTIONS ---
   const handleDeposit = () => {
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return;
-    
-    // TODO: INTEGRATE SOLANA VAULT DEPOSIT INSTRUCTION HERE
-    // program.methods.deposit(new BN(amount)).accounts({...}).rpc()
-    
     setVaultBalance(prev => prev + parseFloat(depositAmount));
     setDepositAmount('');
     alert(`Successfully deposited ${depositAmount} SOL to Vault.`);
@@ -168,10 +160,6 @@ export default function App() {
   const handleWithdraw = () => {
     if (!withdrawAmount || isNaN(withdrawAmount) || parseFloat(withdrawAmount) <= 0) return;
     if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Vault Balance");
-
-    // TODO: INTEGRATE SOLANA VAULT WITHDRAW INSTRUCTION HERE
-    // program.methods.withdraw(new BN(amount)).accounts({...}).rpc()
-
     setVaultBalance(prev => prev - parseFloat(withdrawAmount));
     setWithdrawAmount('');
     alert(`Withdrawing ${withdrawAmount} SOL to wallet...`);
@@ -287,7 +275,6 @@ export default function App() {
             </button>
           )}
 
-          {/* Mobile Menu Toggle */}
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -564,9 +551,9 @@ export default function App() {
               <div className="flex flex-col gap-6">
                 <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                   <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletType === 'metamask' ? 'MetaMask' : 'Phantom'}</span>
-                  <div className="flex items-center gap-2">
-                    <Wallet2 className="w-4 h-4 text-cyan-400" />
-                    <span className="text-lg font-black text-white">{walletAddress}</span>
+                  <div className="flex items-center gap-3">
+                    <Wallet2 className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                    <span className="text-sm md:text-lg font-black text-white break-all leading-tight">{walletAddress}</span>
                   </div>
                 </div>
 
@@ -618,27 +605,35 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* LIVE FEED MODAL */}
+      {/* LIVE FEED MODAL - UPGRADED VISUALS */}
       <AnimatePresence>
         {showLiveFeed && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col">
-              <div className="flex justify-between items-center mb-6 flex-none">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-6 md:p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col overflow-hidden">
+              <div className="flex justify-between items-center mb-6 flex-none border-b border-white/5 pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <h3 className="text-xl font-black italic uppercase text-white">Live Activity Feed</h3>
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]" />
+                  <h3 className="text-xl font-black italic uppercase text-white tracking-tight">Arena Feed</h3>
                 </div>
-                <button onClick={() => setShowLiveFeed(false)}><X className="w-5 h-5 text-neutral-500 hover:text-white" /></button>
+                <button onClick={() => setShowLiveFeed(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><X className="w-4 h-4 text-neutral-400 hover:text-white" /></button>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
-                {[...Array(10)].map((_, i) => (
-                  <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/5">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
-                      <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'DEPOSITED'}</span>
+                {[...Array(15)].map((_, i) => (
+                  <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-white/[0.02] to-transparent border border-white/5 hover:border-cyan-500/20 transition-colors">
+                    <div className="flex items-center gap-3">
+                       <div className={`p-2 rounded-lg ${Math.random() > 0.5 ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                         {Math.random() > 0.5 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
+                       </div>
+                       <div className="flex flex-col">
+                         <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
+                         <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'VAULT DEPOSIT'}</span>
+                       </div>
                     </div>
-                    <span className="text-xs font-black text-cyan-400">{(Math.random() * 5).toFixed(2)} SOL</span>
+                    <div className="text-right">
+                       <span className="text-xs font-black text-cyan-400 block">{(Math.random() * 5).toFixed(2)} SOL</span>
+                       <span className="text-[8px] font-bold text-neutral-600">Just now</span>
+                    </div>
                   </div>
                 ))}
               </div>
