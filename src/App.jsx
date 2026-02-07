@@ -25,7 +25,8 @@ import {
   LogOut,
   ArrowDownCircle,
   ArrowUpCircle,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -67,8 +68,13 @@ export default function App() {
   const [vaultBalance, setVaultBalance] = useState(0.0); // Real funds
   const [winnings, setWinnings] = useState(0.0);
 
+  // Dashboard Inputs
+  const [depositAmount, setDepositAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+
   // Connection State
   const [walletAddress, setWalletAddress] = useState(null);
+  const [walletType, setWalletType] = useState(null); // 'phantom' or 'metamask'
   const [isRealMode, setIsRealMode] = useState(false);
 
   // Modals & Menu
@@ -102,30 +108,73 @@ export default function App() {
   }, [targetDate]);
 
   // --- WALLET LOGIC ---
-  const connectWallet = async () => {
-    // Check for Phantom or other Solana wallets
-    const { solana } = window;
-    if (solana && solana.isPhantom) {
-      try {
-        const response = await solana.connect();
-        setWalletAddress(response.publicKey.toString());
-        // NOTE: In production, you would fetch the actual vault balance from the contract here
-        // For now, we simulate a connected state with 0 vault balance until deposit
-        setShowEntryModal(true); 
-      } catch (err) {
-        console.error("User rejected connection", err);
+  const connectWallet = async (type) => {
+    if (type === 'phantom') {
+      const { solana } = window;
+      if (solana && solana.isPhantom) {
+        try {
+          const response = await solana.connect();
+          setWalletAddress(response.publicKey.toString());
+          setWalletType('phantom');
+          setShowEntryModal(true); 
+        } catch (err) {
+          console.error("User rejected connection", err);
+        }
+      } else {
+        alert("Solana wallet not found! Please install Phantom.");
+        window.open("https://phantom.app/", "_blank");
       }
-    } else {
-      alert("Solana wallet not found! Please install Phantom.");
-      window.open("https://phantom.app/", "_blank");
+    } else if (type === 'metamask') {
+      // Logic for MetaMask Solana Snap would go here
+      // For now, we simulate the connection for the demo environment
+      if (window.ethereum) {
+        try {
+          // Simulate connecting to Solana via Snap
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          // Mocking a Solana-like address derived from MM for the demo
+          setWalletAddress("Sol" + accounts[0].slice(2)); 
+          setWalletType('metamask');
+          setShowEntryModal(true);
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        alert("MetaMask not found!");
+      }
     }
   };
 
   const disconnectWallet = () => {
     setWalletAddress(null);
+    setWalletType(null);
     setIsRealMode(false);
     setGameState('landing');
     setShowDashboard(false);
+    setIsMenuOpen(false);
+  };
+
+  // --- VAULT TRANSACTIONS (PLACEHOLDERS FOR SMART CONTRACT) ---
+  const handleDeposit = () => {
+    if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return;
+    
+    // TODO: INTEGRATE SOLANA VAULT DEPOSIT INSTRUCTION HERE
+    // program.methods.deposit(new BN(amount)).accounts({...}).rpc()
+    
+    setVaultBalance(prev => prev + parseFloat(depositAmount));
+    setDepositAmount('');
+    alert(`Successfully deposited ${depositAmount} SOL to Vault.`);
+  };
+
+  const handleWithdraw = () => {
+    if (!withdrawAmount || isNaN(withdrawAmount) || parseFloat(withdrawAmount) <= 0) return;
+    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Vault Balance");
+
+    // TODO: INTEGRATE SOLANA VAULT WITHDRAW INSTRUCTION HERE
+    // program.methods.withdraw(new BN(amount)).accounts({...}).rpc()
+
+    setVaultBalance(prev => prev - parseFloat(withdrawAmount));
+    setWithdrawAmount('');
+    alert(`Withdrawing ${withdrawAmount} SOL to wallet...`);
   };
 
   // --- GAME LOGIC ---
@@ -133,8 +182,12 @@ export default function App() {
     const currentBalance = isRealMode ? vaultBalance : demoBalance;
     
     if (currentBalance < betAmount) {
-      if (isRealMode) alert("Insufficient funds in Vault. Please deposit.");
-      else alert("Demo bankrupt! Resetting...");
+      if (isRealMode) {
+        setShowDashboard(true); // Open dashboard to deposit
+      } else {
+        alert("Demo bankrupt! Resetting...");
+        setDemoBalance(10.0);
+      }
       return;
     }
 
@@ -166,24 +219,7 @@ export default function App() {
     setStreak(0);
     if (!isRealMode) setDemoBalance(10.0);
     setShowEntryModal(false);
-  };
-
-  // --- MOCK VAULT TRANSACTIONS ---
-  const handleDeposit = () => {
-    // This is where you would trigger the smart contract Deposit function
-    const amount = prompt("Enter SOL amount to deposit to Vault:");
-    if (amount && !isNaN(amount)) {
-      setVaultBalance(prev => prev + parseFloat(amount));
-      alert(`Successfully deposited ${amount} SOL to your betting vault.`);
-    }
-  };
-
-  const handleWithdraw = () => {
-    // This is where you would trigger the smart contract Withdraw function
-    if (vaultBalance <= 0) return alert("No funds to withdraw.");
-    alert(`Withdrawing ${vaultBalance.toFixed(2)} SOL to wallet ${walletAddress.slice(0,6)}...`);
-    setVaultBalance(0);
-    setWinnings(0);
+    setIsMenuOpen(false);
   };
 
   return (
@@ -243,7 +279,7 @@ export default function App() {
             </button>
           ) : (
             <button 
-              onClick={connectWallet}
+              onClick={() => setShowEntryModal(true)}
               className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/20 text-white font-black text-[9px] uppercase tracking-widest hover:bg-white hover:text-black hover:border-white transition-all duration-300 flex items-center gap-2"
             >
               <Wallet2 className="w-3.5 h-3.5" />
@@ -262,6 +298,17 @@ export default function App() {
       <AnimatePresence>
         {isMenuOpen && (
           <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 z-[90] p-6 lg:hidden flex flex-col gap-4">
+            {walletAddress && (
+              <div className="flex flex-col pb-4 border-b border-white/10">
+                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Active Wallet</span>
+                <span className="text-sm font-black text-cyan-400">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                <div className="flex justify-between mt-2">
+                  <span className="text-[9px] font-black text-neutral-500 uppercase">Balance</span>
+                  <span className="text-xs font-black text-white">{isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL</span>
+                </div>
+              </div>
+            )}
+            
             <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
             </button>
@@ -271,6 +318,17 @@ export default function App() {
             <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
               <Activity className="w-4 h-4 text-red-500" /> LIVE FEED
             </button>
+
+            {walletAddress && (
+              <>
+                <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
+                  <User className="w-4 h-4" /> MY PROFILE
+                </button>
+                <button onClick={disconnectWallet} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
+                  <LogOut className="w-4 h-4" /> DISCONNECT
+                </button>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -492,20 +550,20 @@ export default function App() {
         </div>
       </footer>
 
-      {/* DASHBOARD MODAL */}
+      {/* DASHBOARD MODAL - UPGRADED UI */}
       <AnimatePresence>
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black italic uppercase text-white">My Arena Profile</h3>
+                <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
                 <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
               </div>
               
               <div className="flex flex-col gap-6">
                 <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected Wallet</span>
+                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletType === 'metamask' ? 'MetaMask' : 'Phantom'}</span>
                   <div className="flex items-center gap-2">
                     <Wallet2 className="w-4 h-4 text-cyan-400" />
                     <span className="text-lg font-black text-white">{walletAddress}</span>
@@ -523,13 +581,32 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex gap-3 mt-4">
-                  <button onClick={handleDeposit} className="flex-1 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center justify-center gap-2">
-                    <ArrowDownCircle className="w-4 h-4" /> Deposit
-                  </button>
-                  <button onClick={handleWithdraw} className="flex-1 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center justify-center gap-2">
-                    <ArrowUpCircle className="w-4 h-4" /> Withdraw
-                  </button>
+                {/* Deposit/Withdraw Section */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Amount SOL" 
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <button onClick={handleDeposit} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2">
+                      <ArrowDownCircle className="w-4 h-4" /> Deposit
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Amount SOL" 
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors"
+                    />
+                    <button onClick={handleWithdraw} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2">
+                      <ArrowUpCircle className="w-4 h-4" /> Withdraw
+                    </button>
+                  </div>
                 </div>
 
                 <button onClick={disconnectWallet} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2">
@@ -570,7 +647,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ENTRY MODAL */}
+      {/* ENTRY MODAL - ADDED METAMASK BUTTON */}
       <AnimatePresence>
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
@@ -581,18 +658,48 @@ export default function App() {
                 <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
                 <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => { if(walletAddress) { setIsRealMode(true); setGameState('playing'); setShowEntryModal(false); } else { connectWallet(); } }} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
-                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
-                  <p className="text-xs font-black text-white italic uppercase">{walletAddress ? 'Enter Vault' : 'Connect First'}</p>
-                </div>
-                <button 
-                  onClick={() => { setIsRealMode(false); setGameState('playing'); setShowEntryModal(false); }} 
-                  className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all"
-                >
-                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
-                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
-                </button>
+              <div className="flex flex-col gap-6">
+                {!walletAddress ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => connectWallet('phantom')} 
+                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-purple-500 transition-all text-center group"
+                    >
+                      <span className="text-[10px] font-black text-purple-400 block mb-1">PHANTOM</span>
+                      <p className="text-xs font-black text-white italic uppercase">Solana Native</p>
+                    </button>
+                    <button 
+                      onClick={() => connectWallet('metamask')} 
+                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-orange-500 transition-all text-center group"
+                    >
+                      <span className="text-[10px] font-black text-orange-500 block mb-1">METAMASK</span>
+                      <p className="text-xs font-black text-white italic uppercase">Solana Snap</p>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div onClick={() => { setIsRealMode(true); setGameState('playing'); setShowEntryModal(false); }} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
+                      <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
+                      <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
+                    </div>
+                    <button 
+                      onClick={() => { setIsRealMode(false); setGameState('playing'); setShowEntryModal(false); }} 
+                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all"
+                    >
+                      <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
+                      <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
+                    </button>
+                  </div>
+                )}
+                
+                {!walletAddress && (
+                  <button 
+                    onClick={() => { setIsRealMode(false); setGameState('playing'); setShowEntryModal(false); }}
+                    className="text-[9px] font-black text-neutral-500 hover:text-white uppercase tracking-widest text-center"
+                  >
+                    Continue to Simulator (No Wallet)
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
