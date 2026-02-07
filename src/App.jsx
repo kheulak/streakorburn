@@ -59,7 +59,7 @@ const PREVIEW_MARKETS = [
   { id: 3, title: "MVP Prediction", vol: "5.8M SOL", users: "8.1k", delta: "+62%", liveDate: "FEB 08" },
 ];
 
-export default function App() {
+function GameContent() {
   // --- STATE INITIALIZATION WITH PERSISTENCE ---
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -736,5 +736,12 @@ export default function App() {
         @media (max-width: 639px) { .xs\\:hidden { display: block; } .xs\\:inline { display: none; } }
       `}} />
     </div>
+  );
+}
+export default function App() {
+  return (
+    <WalletConnectionProvider>
+      <GameContent />
+    </WalletConnectionProvider>
   );
 }
