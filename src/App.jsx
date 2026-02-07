@@ -14,10 +14,14 @@ import {
   Zap,
   Twitter,
   ExternalLink,
-  Coins
+  Coins,
+  ShieldCheck,
+  MousePointer2,
+  LineChart,
+  ChevronDown
 } from 'lucide-react';
 
-// --- UPDATED LOGO: THE BLUE FLAME (Obsidian Flare) ---
+// --- YOUR LOGO (KEPT EXACTLY AS REQUESTED) ---
 const CustomLogo = ({ className = "w-8 h-8" }) => (
   <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -26,23 +30,13 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
         <stop offset="100%" stopColor="#3b82f6" />
       </linearGradient>
     </defs>
-    {/* Outer Glow Path */}
-    <path 
-      d="M50 95C30 95 15 75 15 55C15 35 45 5 50 5C55 5 85 35 85 55C85 75 70 95 50 95Z" 
-      fill="url(#blueFlameGradient)" 
-      fillOpacity="0.15" 
-    />
-    {/* The Core Blue Flame */}
-    <path 
-      d="M50 90C35 90 25 78 25 60C25 45 40 25 50 10C60 25 75 45 75 60C75 78 65 90 50 90ZM50 75C58 75 63 68 63 58C63 48 50 35 50 35C50 35 37 48 37 58C37 68 42 75 50 75Z" 
-      fill="url(#blueFlameGradient)" 
-    />
-    {/* Sharp Accent Lines */}
+    <path d="M50 95C30 95 15 75 15 55C15 35 45 5 50 5C55 5 85 35 85 55C85 75 70 95 50 95Z" fill="url(#blueFlameGradient)" fillOpacity="0.15" />
+    <path d="M50 90C35 90 25 78 25 60C25 45 40 25 50 10C60 25 75 45 75 60C75 78 65 90 50 90ZM50 75C58 75 63 68 63 58C63 48 50 35 50 35C50 35 37 48 37 58C37 68 42 75 50 75Z" fill="url(#blueFlameGradient)" />
     <path d="M42 28L35 38M58 28L65 38" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
   </svg>
 );
 
-// --- RESEARCHED SB LX (2026) BETTING DECK ---
+// --- SB LX CONTENT DECK ---
 const SUPER_BOWL_DECK = [
   { id: 1, question: "Coin Toss: Tails?", sub: "Beta Vol: 4,102", category: "PROPS" },
   { id: 2, question: "Total Points: Over 48.5?", sub: "Beta Vol: 12,119", category: "OVER/UNDER" },
@@ -67,7 +61,6 @@ export default function App() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [activeLeverage, setActiveLeverage] = useState('2x');
   
-  // Real Super Bowl LX Target: Feb 8, 2026 @ 6:30 PM ET
   const targetDate = useMemo(() => new Date('2026-02-08T18:30:00-05:00').getTime(), []);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
@@ -75,7 +68,6 @@ export default function App() {
     const timer = setInterval(() => {
       const now = new Date().getTime();
       const distance = targetDate - now;
-
       if (distance < 0) {
         setCountdown({ h: 0, m: 0, s: 0 });
         clearInterval(timer);
@@ -108,6 +100,7 @@ export default function App() {
     setCurrentIdx(0);
     setStreak(0);
     setShowEntryModal(false);
+    setIsMenuOpen(false);
   };
 
   const navLinks = [
@@ -117,34 +110,31 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#020202] text-[#E5E5E5] font-sans selection:bg-cyan-500/30 flex flex-col antialiased overflow-x-hidden">
-      {/* Universal Background Glows */}
+    <div className="min-h-screen bg-[#020205] text-[#F0F0F0] font-sans selection:bg-magenta-500/30 flex flex-col antialiased overflow-x-hidden">
+      {/* VIBRANT SUPERBOWL LX 2026 BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#0c1421_0%,transparent_50%)]" />
-        <div className="absolute top-[-5%] right-[-5%] w-[40vw] h-[40vw] bg-cyan-500/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-5%] left-[-5%] w-[40vw] h-[40vw] bg-purple-500/[0.04] rounded-full blur-[120px]" />
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_-20%,#1e0b3d_0%,#020205_70%)]" />
+        <div className="absolute top-[-5%] right-[-5%] w-[60vw] h-[60vw] bg-magenta-600/[0.18] rounded-full blur-[140px] animate-pulse" />
+        <div className="absolute bottom-[-5%] left-[-5%] w-[60vw] h-[60vw] bg-cyan-700/[0.15] rounded-full blur-[140px]" />
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.05] pointer-events-none" />
       </div>
 
       {/* Navigation */}
-      <nav className="px-4 md:px-8 py-4 flex justify-between items-center border-b border-white/[0.03] bg-black/60 backdrop-blur-3xl sticky top-0 z-[100]">
+      <nav className="px-4 md:px-8 py-4 flex justify-between items-center border-b border-magenta-500/20 bg-black/80 backdrop-blur-2xl sticky top-0 z-[100] h-20">
         <div className="flex items-center gap-4 md:gap-12">
           <div onClick={handleReset} className="flex items-center gap-3 cursor-pointer group">
-            <CustomLogo className="w-8 h-8 group-hover:scale-110 transition-transform" />
+            <CustomLogo className="w-9 h-9 group-hover:scale-110 transition-transform" />
             <div className="flex flex-col">
-              <span className="font-black tracking-tighter text-lg md:text-xl uppercase leading-none italic">
-                STREAK<span className="text-cyan-400">OR</span>BURN
+              <span className="font-black tracking-tighter text-lg md:text-2xl uppercase leading-none italic group-hover:text-cyan-400 transition-colors">
+                STREAK<span className="text-magenta-500">OR</span>BURN
               </span>
-              <span className="text-[7px] font-bold text-neutral-500 uppercase tracking-[0.3em] mt-1">SUPER BOWL LX STREAKING</span>
+              <span className="text-[8px] font-black text-cyan-400 uppercase tracking-[0.3em] mt-1">SUPER BOWL LX 2026</span>
             </div>
           </div>
 
           <div className="hidden lg:flex items-center gap-8">
             {navLinks.map(link => (
-              <a 
-                key={link.name} 
-                href="#" 
-                className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${link.active ? 'text-white' : link.highlight ? 'text-cyan-400 hover:text-white' : 'text-neutral-500 hover:text-white'}`}
-              >
+              <a key={link.name} href="#" className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:scale-105 ${link.active ? 'text-white border-b-2 border-magenta-500 pb-1' : link.highlight ? 'text-cyan-400 hover:text-cyan-300' : 'text-neutral-500 hover:text-white'}`}>
                 <link.icon className="w-3 h-3" />
                 {link.name}
               </a>
@@ -154,71 +144,114 @@ export default function App() {
 
         <div className="flex items-center gap-3 md:gap-6">
           {gameState !== 'landing' && (
-            <div className="flex flex-col items-end px-3 md:px-6 border-r border-white/5">
-              <span className="text-[7px] md:text-[8px] font-black text-cyan-400 uppercase tracking-[0.1em]">Simulator Funds</span>
+            <div className="flex flex-col items-end px-3 md:px-6 border-r border-white/10">
+              <span className="text-[7px] font-black text-magenta-500 uppercase tracking-widest">Balance</span>
               <span className="text-xs md:text-sm font-black text-white tabular-nums">{demoBalance.toFixed(2)} SOL</span>
             </div>
           )}
-
+          
           <button 
-            onClick={() => setShowEntryModal(true)}
-            className="px-4 md:px-8 py-2 md:py-3 rounded bg-white text-black font-black text-[9px] md:text-[10px] uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/5 active:scale-95 flex items-center gap-2"
+            onClick={() => setShowEntryModal(true)} 
+            className="px-4 md:px-8 py-2.5 rounded-lg bg-gradient-to-r from-magenta-600 to-cyan-600 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest hover:shadow-[0_0_25px_rgba(236,72,153,0.5)] transition-all active:scale-95 flex items-center gap-2 border border-white/20"
           >
             <Wallet2 className="w-3 h-3" />
-            <span className="hidden sm:inline">Access Platform</span>
-            <span className="sm:hidden">Connect</span>
+            <span>Connect <span className="hidden sm:inline">Arena</span></span>
           </button>
-          
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-neutral-400">
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)} 
+            className="lg:hidden p-2 text-white bg-white/5 rounded-lg border border-magenta-500/30 active:bg-magenta-500/20"
+          >
+            {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </nav>
 
-      {/* Mobile Menu Overlay */}
+      {/* MOBILE DROPDOWN */}
       <AnimatePresence>
         {isMenuOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            exit={{ opacity: 0, y: -20 }} 
-            className="lg:hidden fixed inset-x-0 top-[65px] bg-black border-b border-white/10 z-[90] p-6 flex flex-col gap-6 backdrop-blur-xl"
-          >
-            {navLinks.map(link => (
-              <a key={link.name} href="#" className={`flex items-center gap-4 text-xs font-black uppercase tracking-widest ${link.highlight ? 'text-cyan-400' : 'text-neutral-400'}`}>
-                <link.icon className="w-4 h-4" />
-                {link.name}
-              </a>
-            ))}
-          </motion.div>
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setIsMenuOpen(false)}
+              className="lg:hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[110]"
+            />
+            <motion.div 
+              initial={{ y: -50, opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              exit={{ y: -50, opacity: 0 }} 
+              className="lg:hidden fixed inset-x-0 top-20 bg-[#0a0a0f] border-b border-magenta-500/40 z-[120] p-6 shadow-2xl"
+            >
+              <div className="flex flex-col gap-4">
+                {navLinks.map(link => (
+                  <a 
+                    key={link.name} 
+                    href="#" 
+                    onClick={() => setIsMenuOpen(false)}
+                    className={`flex items-center gap-4 text-[11px] font-black uppercase tracking-widest p-5 rounded-xl border transition-all ${link.highlight ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'bg-white/5 text-neutral-300 border-white/5'}`}
+                  >
+                    <link.icon className={`w-4 h-4 ${link.highlight ? 'text-cyan-400' : 'text-neutral-500'}`} />
+                    {link.name}
+                  </a>
+                ))}
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1600px] mx-auto w-full p-4 md:p-8 lg:p-16 gap-12 lg:gap-16 z-10">
-        
         {/* Left Column: Hero/Terminal */}
-        <section className="flex-1 flex flex-col justify-center min-h-[50vh]">
+        <section className="flex-1 flex flex-col justify-center min-h-[50vh] pt-8 md:pt-0">
           <AnimatePresence mode="wait">
             {gameState === 'landing' && (
-              <motion.div key="landing" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="max-w-2xl">
-                <div className="inline-flex items-center gap-3 mb-6 md:mb-8 px-4 py-2 rounded-full bg-white/[0.02] border border-white/[0.05]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-[0.2em]">Deploying Feb 8, 2026</span>
+              <motion.div key="landing" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="max-w-3xl">
+                <div className="inline-flex items-center gap-3 mb-8 px-5 py-2.5 rounded-full bg-gradient-to-r from-magenta-500/20 to-cyan-500/20 border border-magenta-500/40">
+                  <span className="w-2 h-2 rounded-full bg-magenta-500 animate-pulse shadow-[0_0_10px_#ec4899]" />
+                  <span className="text-[10px] font-black text-white uppercase tracking-[0.25em]">Super Bowl LX Finals • Feb 08, 2026</span>
                 </div>
-                <h1 className="text-5xl md:text-7xl lg:text-[8.5rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase">
-                  STREAK<br/>OR <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">BURN.</span>
+                <h1 className="text-6xl md:text-8xl lg:text-[9.5rem] font-black italic tracking-tighter leading-[0.82] mb-10 uppercase">
+                  STREAK<br/>OR <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-magenta-500 to-blue-600 animate-gradient-x">BURN.</span>
                 </h1>
-                <p className="text-neutral-500 text-base md:text-xl mb-10 leading-relaxed font-medium max-w-lg">
-                  Aggressive prediction markets with up to 25x leverage. Built for the Super Bowl LX hype cycle.
-                </p>
-                <div className="flex flex-wrap gap-4 md:gap-6">
-                  <button onClick={() => setShowEntryModal(true)} className="w-full sm:w-auto px-10 md:px-12 py-5 md:py-6 bg-white text-black rounded font-black text-xs uppercase tracking-widest hover:bg-cyan-400 transition-all flex items-center justify-center gap-3 group">
-                    Enter Terminal <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                
+                {/* 3-STEP TUTORIAL - CLEANED UP UI */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-14 border-l-4 border-magenta-600 pl-8">
+                  <div className="flex flex-col gap-3 group cursor-default p-4 rounded-2xl hover:bg-white/[0.03] transition-colors border border-transparent hover:border-white/5">
+                    <div className="flex items-center gap-3 text-magenta-500 group-hover:text-cyan-400 transition-colors">
+                      <div className="p-2 rounded-lg bg-magenta-500/10 border border-magenta-500/20"><MousePointer2 className="w-5 h-5" /></div>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Step 01</span>
+                    </div>
+                    <p className="text-[13px] font-bold text-neutral-300 leading-snug group-hover:text-white transition-colors uppercase italic tracking-tight">Initialize Arena Multiplier.</p>
+                  </div>
+                  <div className="flex flex-col gap-3 group cursor-default p-4 rounded-2xl hover:bg-white/[0.03] transition-colors border border-transparent hover:border-white/5">
+                    <div className="flex items-center gap-3 text-cyan-400 group-hover:text-magenta-500 transition-colors">
+                      <div className="p-2 rounded-lg bg-cyan-400/10 border border-cyan-400/20"><LineChart className="w-5 h-5" /></div>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Step 02</span>
+                    </div>
+                    <p className="text-[13px] font-bold text-neutral-300 leading-snug group-hover:text-white transition-colors uppercase italic tracking-tight">Predict Live SB Plays.</p>
+                  </div>
+                  <div className="flex flex-col gap-3 group cursor-default p-4 rounded-2xl hover:bg-white/[0.03] transition-colors border border-transparent hover:border-white/5">
+                    <div className="flex items-center gap-3 text-blue-400 group-hover:text-cyan-400 transition-colors">
+                      <div className="p-2 rounded-lg bg-blue-400/10 border border-blue-400/20"><ShieldCheck className="w-5 h-5" /></div>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Step 03</span>
+                    </div>
+                    <p className="text-[13px] font-bold text-neutral-300 leading-snug group-hover:text-white transition-colors uppercase italic tracking-tight">Secure Streak or Burn.</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-5 md:gap-8">
+                  <button 
+                    onClick={() => setShowEntryModal(true)} 
+                    className="w-full sm:w-auto px-12 md:px-14 py-6 md:py-7 bg-white text-black rounded-xl font-black text-xs uppercase tracking-[0.25em] hover:bg-magenta-600 hover:text-white transition-all shadow-[0_15px_50px_rgba(236,72,153,0.4)] flex items-center justify-center gap-3 group active:scale-95 border-b-4 border-neutral-300 hover:border-magenta-700"
+                  >
+                    Enter Terminal <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </button>
-                  <div className="flex items-center gap-4 px-6 md:px-8 border-l border-white/10 mx-auto sm:mx-0">
+                  <div className="flex items-center gap-6 px-8 border-l border-magenta-500/30 mx-auto sm:mx-0">
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-black text-neutral-600 uppercase">Live Mainnet in</span>
-                      <span className="text-lg md:text-xl font-black tabular-nums">{countdown.h}H {countdown.m}M {countdown.s}S</span>
+                      <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest">Kickoff Clock</span>
+                      <span className="text-2xl md:text-3xl font-black tabular-nums text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">{countdown.h}H {countdown.m}M {countdown.s}S</span>
                     </div>
                   </div>
                 </div>
@@ -226,52 +259,37 @@ export default function App() {
             )}
 
             {gameState === 'playing' && (
-              <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-[600px] mx-auto lg:mx-0">
-                <div className="bg-[#080808] border border-white/[0.06] rounded-3xl p-6 md:p-10 relative shadow-2xl overflow-hidden">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 pb-8 border-b border-white/[0.04]">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center shadow-inner">
-                        <Flame className="w-6 h-6 text-cyan-400" />
+              <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-[650px] mx-auto lg:mx-0">
+                <div className="bg-[#0c0c14]/90 border border-magenta-500/40 rounded-[3rem] p-8 md:p-12 relative shadow-2xl overflow-hidden backdrop-blur-3xl ring-2 ring-white/5">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-12 pb-10 border-b border-magenta-500/20">
+                    <div className="flex items-center gap-5">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-magenta-500/30 to-cyan-500/30 flex items-center justify-center border border-magenta-500/50">
+                        <Flame className="w-8 h-8 text-magenta-400" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">Active Streak</span>
-                        <span className="text-2xl font-black text-white italic">{streak}X</span>
+                        <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest">Terminal Streak</span>
+                        <span className="text-4xl font-black text-white italic tracking-tighter tabular-nums">{streak}X</span>
                       </div>
                     </div>
-                    <div className="flex gap-1.5 bg-black p-1.5 rounded-xl border border-white/[0.05] w-full md:w-auto">
+                    <div className="flex gap-2 bg-black/60 p-2 rounded-2xl border border-white/10 w-full md:w-auto">
                       {['2x', '5x', '10x', '25x'].map(lev => (
-                        <button 
-                          key={lev}
-                          onClick={() => setActiveLeverage(lev)}
-                          className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-[10px] font-black transition-all ${activeLeverage === lev ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' : 'text-neutral-600 hover:text-white hover:bg-white/5'}`}
-                        >
-                          {lev}
-                        </button>
+                        <button key={lev} onClick={() => setActiveLeverage(lev)} className={`flex-1 md:flex-none px-5 py-3 rounded-xl text-[11px] font-black transition-all ${activeLeverage === lev ? 'bg-magenta-600 text-white shadow-[0_0_20px_#ec4899]' : 'text-neutral-500 hover:text-white hover:bg-white/10'}`}>{lev}</button>
                       ))}
                     </div>
                   </div>
-
-                  <div className="min-h-[200px] flex flex-col justify-center">
-                    <span className="inline-block px-3 py-1 rounded bg-cyan-500/5 text-[9px] font-black text-cyan-400 uppercase tracking-[0.3em] mb-6 w-fit">
-                      {SUPER_BOWL_DECK[currentIdx].category}
-                    </span>
-                    <h2 className="text-3xl md:text-5xl lg:text-6xl font-black italic tracking-tighter uppercase leading-[0.9] mb-4">
+                  <div className="min-h-[250px] flex flex-col justify-center">
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-black text-cyan-400 uppercase tracking-[0.3em] mb-8 w-fit">{SUPER_BOWL_DECK[currentIdx].category}</span>
+                    <h2 className="text-4xl md:text-6xl font-black italic tracking-tighter uppercase leading-[0.9] mb-6 text-white">
                       {SUPER_BOWL_DECK[currentIdx].question}
                     </h2>
-                    <div className="flex items-center gap-4 mt-4">
-                      <span className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest tabular-nums">SIM BAL: {demoBalance.toFixed(2)} SOL</span>
-                      <span className="w-1 h-1 rounded-full bg-neutral-800" />
-                      <span className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">Risk: {activeLeverage}</span>
-                    </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4 md:gap-6 mt-12">
-                    <button onClick={() => handleAction(false)} className="group relative py-6 rounded-xl bg-white/[0.03] border border-white/[0.08] overflow-hidden transition-all hover:border-red-500/40">
-                      <span className="relative z-10 font-black text-xs uppercase tracking-[0.3em] group-hover:text-red-400">Burn It</span>
-                      <div className="absolute inset-0 bg-red-500/[0.03] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="grid grid-cols-2 gap-5 md:gap-8 mt-14">
+                    <button onClick={() => handleAction(false)} className="group relative py-7 rounded-3xl bg-white/[0.03] border border-white/10 overflow-hidden transition-all hover:border-red-500 active:scale-95">
+                      <span className="relative z-10 font-black text-[11px] uppercase tracking-[0.4em] group-hover:text-red-400 transition-colors">Burn It</span>
+                      <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
-                    <button onClick={() => handleAction(true)} className="group relative py-6 rounded-xl bg-white text-black overflow-hidden transition-all hover:bg-cyan-400 hover:scale-[1.02]">
-                      <span className="relative z-10 font-black text-xs uppercase tracking-[0.3em]">Streak It</span>
+                    <button onClick={() => handleAction(true)} className="group relative py-7 rounded-3xl bg-gradient-to-r from-magenta-600 to-cyan-600 text-white overflow-hidden transition-all hover:scale-[1.03] shadow-[0_0_30px_rgba(236,72,153,0.3)] active:scale-95 border-t border-white/30">
+                      <span className="relative z-10 font-black text-[11px] uppercase tracking-[0.4em] drop-shadow-lg">Streak It</span>
                     </button>
                   </div>
                 </div>
@@ -279,163 +297,135 @@ export default function App() {
             )}
 
             {gameState === 'burned' && (
-              <motion.div key="burned" initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center p-12 md:p-16 bg-[#080808] border border-red-500/20 rounded-3xl max-w-md mx-auto">
-                <Flame className="w-16 h-16 text-red-500 mx-auto mb-6" />
-                <h2 className="text-5xl md:text-6xl font-black italic uppercase mb-4 leading-none">WIPED.</h2>
-                <p className="text-neutral-500 mb-10 text-[10px] font-black uppercase tracking-widest leading-relaxed">The prediction was wrong. Your simulation position has been liquidated.</p>
-                <button onClick={() => {setGameState('playing'); setCurrentIdx(0); setStreak(0);}} className="w-full bg-white text-black py-5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Re-Buy Entry</button>
+              <motion.div key="burned" initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center p-14 md:p-20 bg-[#0c0c14]/90 border-2 border-red-500/50 rounded-[3.5rem] max-w-lg mx-auto backdrop-blur-3xl shadow-[0_0_100px_rgba(239,68,68,0.2)]">
+                <Flame className="w-20 h-20 text-red-500 mx-auto mb-8 drop-shadow-[0_0_15px_#ef4444]" />
+                <h2 className="text-6xl md:text-7xl font-black italic uppercase mb-6 leading-none text-white">BURNED.</h2>
+                <p className="text-neutral-400 text-xs font-bold uppercase mb-12 tracking-[0.3em]">Market crash detected. Session wiped.</p>
+                <button onClick={() => {setGameState('playing'); setCurrentIdx(0); setStreak(0);}} className="w-full bg-white text-black py-6 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-magenta-600 hover:text-white transition-all shadow-2xl">Re-Initialize Session</button>
               </motion.div>
             )}
 
             {gameState === 'winner' && (
-              <motion.div key="winner" className="text-center p-12 md:p-16 bg-[#080808] border border-cyan-500/20 rounded-3xl max-w-md mx-auto">
-                <Trophy className="w-16 h-16 text-cyan-400 mx-auto mb-6" />
-                <h2 className="text-5xl md:text-6xl font-black italic uppercase mb-4 leading-none">LEGACY.</h2>
-                <p className="text-neutral-500 mb-10 text-[10px] font-black uppercase tracking-widest leading-relaxed">Full prediction suite cleared. You have achieved maximum simulation streak.</p>
-                <button onClick={() => {setGameState('playing'); setCurrentIdx(0); setStreak(0);}} className="w-full bg-cyan-500 text-black py-5 rounded-xl font-black text-xs uppercase tracking-widest">Restart Suite</button>
+              <motion.div key="winner" className="text-center p-14 md:p-20 bg-[#0c0c14]/90 border-2 border-cyan-500/50 rounded-[3.5rem] max-w-lg mx-auto backdrop-blur-3xl shadow-[0_0_100px_rgba(34,211,238,0.2)]">
+                <Trophy className="w-20 h-20 text-cyan-400 mx-auto mb-8 drop-shadow-[0_0_20px_#22d3ee]" />
+                <h2 className="text-6xl md:text-7xl font-black italic uppercase mb-6 leading-none text-white">LEGEND.</h2>
+                <p className="text-neutral-400 text-xs font-bold uppercase mb-12 tracking-[0.3em]">Max Streak achieved. Rewards unlocked.</p>
+                <button onClick={() => {setGameState('playing'); setCurrentIdx(0); setStreak(0);}} className="w-full bg-cyan-500 text-black py-6 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-magenta-500 hover:text-white transition-all">Clear Terminal</button>
               </motion.div>
             )}
           </AnimatePresence>
         </section>
 
-        {/* Right Column: Large Pre-Live Markets */}
-        <aside className="lg:w-[480px] flex flex-col gap-10">
-          <div className="flex items-center justify-between px-4">
-             <div className="flex items-center gap-3">
-               <BarChart3 className="w-5 h-5 text-cyan-400" />
-               <span className="text-[11px] font-black uppercase tracking-[0.4em] text-neutral-400">Prime Markets</span>
+        {/* Right Column: Pre-Live Markets */}
+        <aside className="lg:w-[500px] flex flex-col gap-12">
+          <div className="flex items-center justify-between px-6">
+             <div className="flex items-center gap-4">
+               <BarChart3 className="w-6 h-6 text-magenta-500" />
+               <span className="text-[12px] font-black uppercase tracking-[0.4em] text-cyan-400">Super Bowl LX Markets</span>
              </div>
-             <div className="px-3 py-1 rounded bg-green-500/10 border border-green-500/20">
-               <span className="text-[8px] font-black text-green-500 uppercase">Terminal Online</span>
+             <div className="px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/40">
+               <span className="text-[9px] font-black text-green-400 uppercase tracking-widest animate-pulse">Live Sync</span>
              </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-8">
             {PREVIEW_MARKETS.map((market) => (
-              <div key={market.id} className="group relative p-8 rounded-3xl border transition-all duration-500 bg-black border-white/[0.03] overflow-hidden">
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 backdrop-blur-[4px] rounded-3xl opacity-100 transition-opacity">
-                  <Lock className="w-6 h-6 text-neutral-500 mb-3" />
-                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Opening {market.liveDate}</span>
+              <div key={market.id} className="group relative p-10 rounded-[2.5rem] border transition-all duration-500 bg-white/[0.03] border-white/[0.08] overflow-hidden backdrop-blur-xl hover:bg-white/[0.05] hover:border-magenta-500/30">
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm rounded-[2.5rem] opacity-100">
+                  <Lock className="w-8 h-8 text-magenta-500 mb-4 drop-shadow-[0_0_10px_rgba(236,72,153,0.4)]" />
+                  <span className="text-[11px] font-black text-white uppercase tracking-[0.4em] border-b border-magenta-500 pb-1">UNLOCKING {market.liveDate}</span>
                 </div>
-                
-                <div className="flex justify-between items-start mb-8 opacity-40">
+                <div className="flex justify-between items-start mb-10 opacity-30">
                   <div>
-                    <h4 className="text-2xl md:text-3xl font-black italic uppercase tracking-tight mb-2">{market.title}</h4>
-                    <span className="text-[9px] font-bold text-neutral-600 uppercase tracking-widest px-2 py-1 bg-black rounded border border-white/[0.05]">{market.code}</span>
+                    <h4 className="text-3xl font-black italic uppercase tracking-tighter mb-3 text-white">{market.title}</h4>
+                    <span className="text-[10px] font-black text-magenta-400 uppercase tracking-widest px-3 py-1 bg-black rounded border border-magenta-500/20">{market.code}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] font-black text-neutral-500 uppercase block mb-1">Expected Vol</span>
-                    <span className="text-lg md:text-xl font-black text-white tabular-nums">{market.vol}</span>
+                    <span className="text-xl font-black text-white tabular-nums">{market.vol}</span>
                   </div>
                 </div>
-
-                <div className="flex justify-between items-end pt-6 border-t border-white/[0.03] opacity-40">
-                  <div className="flex gap-2">
-                     <span className="w-2 h-2 rounded-full bg-cyan-400/20" />
-                     <span className="w-2 h-2 rounded-full bg-cyan-400/10" />
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600">
-                    <span>VIEW DEPTH</span>
-                    <ArrowUpRight className="w-4 h-4" />
-                  </div>
+                <div className="flex justify-between items-end pt-8 border-t border-white/[0.05] opacity-30">
+                  <div className="flex gap-3"><span className="w-2.5 h-2.5 rounded-full bg-magenta-500" /><span className="w-2.5 h-2.5 rounded-full bg-cyan-500" /></div>
+                  <div className="flex items-center gap-3 text-[11px] font-black text-neutral-400"><span>ACCESS DATA</span><ArrowUpRight className="w-5 h-5" /></div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Protocol Telemetry */}
-          <div className="p-8 md:p-10 rounded-[2.5rem] bg-gradient-to-br from-white/[0.02] to-transparent border border-white/[0.05] relative overflow-hidden hidden md:block">
-             <div className="flex flex-col gap-6">
-               <div className="flex justify-between items-center">
-                 <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Global Orderbook Depth</span>
-                 <span className="text-xs font-black text-cyan-400">Awaiting Launch</span>
-               </div>
-               <div className="h-1.5 w-full bg-white/[0.03] rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: '92%' }} className="h-full bg-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
-               </div>
-               <div className="grid grid-cols-2 gap-8 mt-4">
-                 <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-black text-neutral-600 uppercase">Projected Burn</span>
-                    <span className="text-xl font-black italic">42.1M $SOB</span>
-                 </div>
-                 <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-black text-neutral-600 uppercase">Network Load</span>
-                    <span className="text-xl font-black italic">OPTIMAL</span>
-                 </div>
-               </div>
-             </div>
+          <div className="p-10 rounded-[3rem] bg-gradient-to-br from-magenta-900/20 to-cyan-900/20 border border-magenta-500/20 hidden md:block shadow-xl">
+            <h5 className="text-[11px] font-black text-white uppercase tracking-widest mb-6 text-center">Communications Center</h5>
+            <div className="flex gap-5">
+              <button className="flex-1 py-4 rounded-2xl bg-white text-black hover:bg-magenta-500 hover:text-white transition-all flex items-center justify-center gap-3 text-[11px] font-black uppercase shadow-lg">
+                <Twitter className="w-4 h-4" /> X.COM
+              </button>
+              <button className="flex-1 py-4 rounded-2xl bg-black border border-white/20 text-white hover:border-cyan-400 transition-all flex items-center justify-center gap-3 text-[11px] font-black uppercase">
+                <ExternalLink className="w-4 h-4" /> DOCS
+              </button>
+            </div>
           </div>
         </aside>
       </main>
 
-      {/* Entry Selector Modal */}
+      {/* Entry Modal */}
       <AnimatePresence>
         {showEntryModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative bg-[#080808] border border-white/10 p-8 md:p-12 rounded-[2rem] w-full max-w-2xl">
-              <div className="text-center mb-10 md:mb-12">
-                <h3 className="text-3xl md:text-4xl font-black italic uppercase mb-3 tracking-tighter">Initialize Terminal</h3>
-                <p className="text-neutral-500 text-sm font-medium">Connect to the environment for Super Bowl LX predictions.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                {/* Live Version */}
-                <div className="relative group p-6 md:p-8 rounded-2xl bg-black border border-white/5 opacity-50 cursor-not-allowed">
-                  <div className="absolute top-4 right-4 px-2 py-1 rounded bg-magenta-500/10 border border-magenta-500/20 text-[8px] font-black text-magenta-400 uppercase tracking-widest">Awaiting Kickoff</div>
-                  <h4 className="text-xl font-black italic uppercase mb-4 text-neutral-400">Live Mainnet</h4>
-                  <div className="space-y-4 mb-8">
-                     <div className="flex justify-between items-center text-neutral-600">
-                        <Timer className="w-4 h-4" />
-                        <span className="text-base md:text-lg font-black tabular-nums">{countdown.h}:{countdown.m}:{countdown.s}</span>
-                     </div>
-                  </div>
-                  <button disabled className="w-full py-4 rounded-xl border border-white/10 text-neutral-700 font-black text-[10px] uppercase tracking-widest">Coming Soon</button>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/98 backdrop-blur-3xl" />
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 30 }} className="relative bg-[#08080c] border border-magenta-500/40 p-10 md:p-16 rounded-none md:rounded-[4rem] w-full h-full md:h-auto max-w-3xl shadow-[0_0_120px_rgba(236,72,153,0.3)] flex flex-col justify-center overflow-y-auto">
+              <button onClick={() => setShowEntryModal(false)} className="absolute top-10 right-10 p-4 text-white hover:text-magenta-500 transition-colors bg-white/5 rounded-full">
+                <X className="w-8 h-8" />
+              </button>
+              
+              <div className="text-center mb-12 md:mb-16">
+                <div className="w-20 h-20 bg-gradient-to-br from-magenta-500 to-cyan-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl border-t border-white/40">
+                  <ShieldCheck className="w-10 h-10 text-white" />
                 </div>
-
-                {/* Demo Version */}
-                <div className="relative p-6 md:p-8 rounded-2xl bg-white/[0.03] border border-cyan-400/30 hover:border-cyan-400 transition-all cursor-pointer shadow-2xl shadow-cyan-500/5 group">
-                  <div className="absolute top-4 right-4 px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/20 text-[8px] font-black text-cyan-400 uppercase tracking-widest">Open Staging</div>
-                  <h4 className="text-xl font-black italic uppercase mb-4 text-white">Simulator Access</h4>
-                  <div className="space-y-4 mb-8">
-                     <p className="text-[10px] text-neutral-500 leading-relaxed uppercase font-black">Practice the streak mechanics with {demoBalance.toFixed(2)} SOL in staging credits.</p>
-                  </div>
+                <h3 className="text-5xl md:text-6xl font-black italic uppercase mb-4 tracking-tighter text-white">Arena Auth</h3>
+                <p className="text-cyan-400 text-sm font-black uppercase tracking-[0.4em]">SB LX PRE-FLIGHT VERIFICATION</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                <div className="relative p-10 rounded-[3rem] bg-black border border-white/5 opacity-40 cursor-not-allowed">
+                  <h4 className="text-2xl font-black italic uppercase mb-3 text-neutral-400">Pro Arena</h4>
+                  <p className="text-[11px] text-magenta-500 font-black uppercase mb-10 tracking-widest">Awaiting Kickoff</p>
+                  <button disabled className="w-full py-6 rounded-2xl border border-white/10 text-neutral-600 font-black text-[11px] uppercase tracking-widest">Locked</button>
+                </div>
+                <div className="relative p-10 rounded-[3rem] bg-magenta-500/[0.08] border-2 border-magenta-500 hover:border-cyan-400 transition-all cursor-pointer group shadow-2xl shadow-magenta-500/10 ring-1 ring-white/10">
+                  <h4 className="text-2xl font-black italic uppercase mb-3 text-white">Staging Terminal</h4>
+                  <p className="text-[11px] text-neutral-400 leading-relaxed uppercase font-black mb-10 italic tracking-widest underline decoration-magenta-500">Practice with 10.00 SOL Credits.</p>
                   <button 
-                    onClick={() => { setGameState('playing'); setShowEntryModal(false); }}
-                    className="w-full py-4 rounded-xl bg-white text-black font-black text-[10px] uppercase tracking-widest group-hover:bg-cyan-400 transition-all shadow-lg"
+                    onClick={() => { setGameState('playing'); setShowEntryModal(false); }} 
+                    className="w-full py-6 rounded-2xl bg-white text-black font-black text-[11px] uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.2)] group-hover:bg-magenta-600 group-hover:text-white transition-all"
                   >
-                    Enter Simulator
+                    Launch Simulator
                   </button>
                 </div>
               </div>
-
-              <div className="mt-10 md:mt-12 text-center flex flex-col md:flex-row gap-4 items-center justify-center">
-                 <button onClick={handleReset} className="text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest transition-colors flex items-center gap-2">
-                   <X className="w-3 h-3" />
-                   Cancel & Terminate Session
-                 </button>
-                 <span className="hidden md:inline w-1 h-1 rounded-full bg-neutral-800" />
-                 <button onClick={() => setShowEntryModal(false)} className="text-[9px] font-black text-neutral-600 hover:text-white uppercase tracking-widest transition-colors">Return to Dashboard</button>
-              </div>
+              
+              <button onClick={() => setShowEntryModal(false)} className="mt-16 text-[11px] font-black text-neutral-600 hover:text-cyan-400 uppercase tracking-[0.5em] transition-colors self-center">
+                ABORT CONNECTION
+              </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
       {/* Footer Ticker */}
-      <footer className="bg-black border-t border-white/[0.03] py-5 overflow-hidden z-50">
-        <div className="flex gap-16 items-center animate-ticker whitespace-nowrap">
-          {[1,2,3,4].map(i => (
+      <footer className="bg-[#020205] border-t border-magenta-500/20 py-8 overflow-hidden z-50">
+        <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
+          {[1,2,3,4,5,6].map(i => (
             <React.Fragment key={i}>
-              <div className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.3em] text-cyan-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span>SUPER BOWL LX LIVE MARKETS OPENING FEB 08</span>
+              <div className="flex items-center gap-6 text-[11px] font-black uppercase tracking-[0.5em] text-neutral-500">
+                <Lock className="w-3 h-3 text-magenta-500" />
+                <span>UPCOMING: SB LX PLAYER PROPS</span>
               </div>
-              <div className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.3em] text-neutral-600">
-                <span>TERMINAL REFRESH: 120HZ</span>
+              <div className="flex items-center gap-6 text-[11px] font-black uppercase tracking-[0.5em] text-neutral-500">
+                <Lock className="w-3 h-3 text-cyan-400" />
+                <span>UPCOMING: QUARTERLY OVER/UNDER</span>
               </div>
-              <div className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.3em] text-magenta-500">
-                <span>MARKET ENTRY LIQUIDITY: 10M+ $SOL EXPECTED</span>
+              <div className="flex items-center gap-6 text-[11px] font-black uppercase tracking-[0.5em] text-neutral-500">
+                <Lock className="w-3 h-3 text-white" />
+                <span>UPCOMING: LIVE MVP TRACKER</span>
               </div>
             </React.Fragment>
           ))}
@@ -443,26 +433,28 @@ export default function App() {
       </footer>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes ticker {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+        @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-33.33%); } }
+        .animate-ticker { animation: ticker 25s linear infinite; }
+        @keyframes gradient-x {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
         }
-        .animate-ticker { animation: ticker 50s linear infinite; }
-        body { 
-          background-color: #020202; 
-          color-scheme: dark; 
-          overflow-x: hidden; 
-          -webkit-tap-highlight-color: transparent;
+        .animate-gradient-x {
+          background-size: 200% 200%;
+          animation: gradient-x 6s ease infinite;
         }
-        /* Mobile-friendly scrollbar */
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        body { background-color: #020205; color-scheme: dark; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
         
-        /* Ensure Safari supports backdrop-filter */
-        @supports not (backdrop-filter: blur(1px)) {
-          .backdrop-blur-3xl { background: rgba(0,0,0,0.95); }
-        }
+        /* HOVER FIXES - ENSURE TEXT REMAINS VISIBLE */
+        .hover\\:bg-magenta-600:hover { color: white !important; }
+        button.bg-white:hover { color: #020205 !important; }
+
+        .backdrop-blur-3xl { -webkit-backdrop-filter: blur(64px); backdrop-filter: blur(64px); }
+        .backdrop-blur-2xl { -webkit-backdrop-filter: blur(40px); backdrop-filter: blur(40px); }
+        .backdrop-blur-xl { -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); }
       `}} />
     </div>
   );
