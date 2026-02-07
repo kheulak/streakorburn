@@ -59,29 +59,33 @@ const PREVIEW_MARKETS = [
 ];
 
 export default function App() {
+  // --- STATE INITIALIZATION WITH PERSISTENCE ---
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [streak, setStreak] = useState(0);
   
+  // Connection State (Load from localStorage)
+  const [walletAddress, setWalletAddress] = useState(() => localStorage.getItem('sob_wallet_addr') || null);
+  const [walletType, setWalletType] = useState(() => localStorage.getItem('sob_wallet_type') || null);
+  
+  // Mode State (Load from localStorage)
+  const [isRealMode, setIsRealMode] = useState(() => localStorage.getItem('sob_mode') === 'real');
+
   // Balances
   const [demoBalance, setDemoBalance] = useState(10.0);
-  const [vaultBalance, setVaultBalance] = useState(0.0); // Real funds
+  const [vaultBalance, setVaultBalance] = useState(0.0);
   const [winnings, setWinnings] = useState(0.0);
 
   // Dashboard Inputs
   const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
 
-  // Connection State
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [walletType, setWalletType] = useState(null); // 'phantom' or 'metamask'
-  const [isRealMode, setIsRealMode] = useState(false);
-
-  // Modals & Menu
+  // UI State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
+  const [showWalletSelect, setShowWalletSelect] = useState(false); // New sub-modal state
 
   // Gameplay
   const [activeLeverage, setActiveLeverage] = useState(2);
@@ -90,6 +94,50 @@ export default function App() {
   const targetDate = useMemo(() => new Date('2026-02-08T18:30:00-05:00').getTime(), []);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
+  // --- PERSISTENCE EFFECTS ---
+  
+  // 1. Save Session Status
+  useEffect(() => {
+    if (walletAddress) {
+      localStorage.setItem('sob_wallet_addr', walletAddress);
+      localStorage.setItem('sob_wallet_type', walletType);
+      localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
+    } else {
+      localStorage.removeItem('sob_wallet_addr');
+      localStorage.removeItem('sob_wallet_type');
+      localStorage.removeItem('sob_mode');
+    }
+  }, [walletAddress, walletType, isRealMode]);
+
+  // 2. Load/Save Wallet Specific Balances
+  useEffect(() => {
+    if (walletAddress) {
+      if (isRealMode) {
+        // In a real app, this would fetch from chain. 
+        // For now we assume 0 or check if we saved a mock vault balance (optional)
+      } else {
+        // Load Sim Balance for this specific wallet
+        const savedSim = localStorage.getItem(`sob_sim_bal_${walletAddress}`);
+        const savedStreak = localStorage.getItem(`sob_sim_streak_${walletAddress}`);
+        
+        if (savedSim) setDemoBalance(parseFloat(savedSim));
+        else setDemoBalance(10.0); // Default start for new wallet
+
+        if (savedStreak) setStreak(parseInt(savedStreak));
+      }
+    }
+  }, [walletAddress, isRealMode]);
+
+  // 3. Auto-Save Sim Balance when it changes
+  useEffect(() => {
+    if (walletAddress && !isRealMode) {
+      localStorage.setItem(`sob_sim_bal_${walletAddress}`, demoBalance.toString());
+      localStorage.setItem(`sob_sim_streak_${walletAddress}`, streak.toString());
+    }
+  }, [demoBalance, streak, walletAddress, isRealMode]);
+
+
+  // Timer Logic
   useEffect(() => {
     const timer = setInterval(() => {
       const distance = targetDate - new Date().getTime();
@@ -109,34 +157,42 @@ export default function App() {
 
   // --- WALLET LOGIC ---
   const connectWallet = async (type) => {
+    let address = null;
+    
     if (type === 'phantom') {
       const { solana } = window;
       if (solana && solana.isPhantom) {
         try {
           const response = await solana.connect();
-          setWalletAddress(response.publicKey.toString());
-          setWalletType('phantom');
-          setShowEntryModal(true); 
+          address = response.publicKey.toString();
         } catch (err) {
           console.error("User rejected connection", err);
         }
       } else {
         alert("Solana wallet not found! Please install Phantom.");
         window.open("https://phantom.app/", "_blank");
+        return;
       }
     } else if (type === 'metamask') {
       if (window.ethereum) {
         try {
           const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          setWalletAddress("Sol" + accounts[0].slice(2)); 
-          setWalletType('metamask');
-          setShowEntryModal(true);
+          address = "Sol" + accounts[0].slice(2); 
         } catch (err) {
           console.error(err);
         }
       } else {
         alert("MetaMask not found!");
+        return;
       }
+    }
+
+    if (address) {
+      setWalletAddress(address);
+      setWalletType(type);
+      setShowWalletSelect(false);
+      // If we were in the entry modal flow, we don't close it yet, we let user pick mode if not already picked
+      // If user clicked "Connect" from header, we just connect.
     }
   };
 
@@ -147,9 +203,21 @@ export default function App() {
     setGameState('landing');
     setShowDashboard(false);
     setIsMenuOpen(false);
+    // State cleans up via useEffect
   };
 
-  // --- VAULT TRANSACTIONS ---
+  const handleModeSelect = (mode) => {
+    if (!walletAddress) {
+      setShowWalletSelect(true); // Force connect first
+      return;
+    }
+    
+    setIsRealMode(mode === 'real');
+    setGameState('playing');
+    setShowEntryModal(false);
+  };
+
+  // --- TRANSACTIONS ---
   const handleDeposit = () => {
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return;
     setVaultBalance(prev => prev + parseFloat(depositAmount));
@@ -171,9 +239,9 @@ export default function App() {
     
     if (currentBalance < betAmount) {
       if (isRealMode) {
-        setShowDashboard(true); // Open dashboard to deposit
+        setShowDashboard(true); 
       } else {
-        alert("Demo bankrupt! Resetting...");
+        alert("Demo bankrupt! Resetting balance to 10 SOL.");
         setDemoBalance(10.0);
       }
       return;
@@ -205,14 +273,14 @@ export default function App() {
     setGameState('landing');
     setCurrentIdx(0);
     setStreak(0);
-    if (!isRealMode) setDemoBalance(10.0);
+    // Do NOT reset demo balance here, it should persist per user
     setShowEntryModal(false);
     setIsMenuOpen(false);
   };
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
-      {/* SUPERBOWL THEME BACKGROUND */}
+      {/* BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#1e0b3d_0%,#020205_75%)]" />
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-red-600/[0.12] rounded-full blur-[120px]" />
@@ -223,7 +291,7 @@ export default function App() {
       {/* HEADER */}
       <nav className="flex-none px-6 py-4 flex justify-between items-center border-b border-white/10 bg-black/40 backdrop-blur-xl z-[100] h-16">
         <div className="flex items-center gap-10">
-          <div onClick={handleReset} className="flex items-center gap-3 cursor-pointer group">
+          <div onClick={() => setGameState('landing')} className="flex items-center gap-3 cursor-pointer group">
             <CustomLogo className="w-8 h-8 group-hover:rotate-12 transition-transform" />
             <div className="flex flex-col">
               <span className="font-black tracking-tighter text-xl uppercase italic group-hover:text-cyan-400 transition-colors">
@@ -233,7 +301,6 @@ export default function App() {
             </div>
           </div>
           
-          {/* Desktop Menu */}
           <div className="hidden lg:flex items-center gap-8">
             <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <Coins className="w-3.5 h-3.5" /> BUY $SOB
@@ -248,14 +315,17 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
-            <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
-              {isRealMode ? 'Vault Balance' : 'Sim Balance'}
-            </span>
-            <span className="text-xs font-black text-white tabular-nums">
-              {isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL
-            </span>
-          </div>
+          {/* BALANCE DISPLAY - ONLY SHOW IF CONNECTED */}
+          {walletAddress && (
+            <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
+              <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
+                {isRealMode ? 'Vault Balance' : 'Sim Balance'}
+              </span>
+              <span className="text-xs font-black text-white tabular-nums">
+                {isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL
+              </span>
+            </div>
+          )}
           
           {walletAddress ? (
             <button 
@@ -290,7 +360,9 @@ export default function App() {
                 <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Active Wallet</span>
                 <span className="text-sm font-black text-cyan-400">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
                 <div className="flex justify-between mt-2">
-                  <span className="text-[9px] font-black text-neutral-500 uppercase">Balance</span>
+                  <span className="text-[9px] font-black text-neutral-500 uppercase">
+                    {isRealMode ? 'Vault Balance' : 'Sim Balance'}
+                  </span>
                   <span className="text-xs font-black text-white">{isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL</span>
                 </div>
               </div>
@@ -322,8 +394,6 @@ export default function App() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 p-6 overflow-hidden z-10">
-        
-        {/* CENTER TERMINAL SECTION */}
         <section className="flex flex-col min-h-0 justify-center items-center">
           <AnimatePresence mode="wait">
             {gameState === 'landing' && (
@@ -336,11 +406,10 @@ export default function App() {
                   SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span>
                 </h1>
                 
-                {/* 3-STEP TUTORIAL */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto mb-10">
                   <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-cyan-400/50 transition-colors">
                     <span className="text-[10px] font-black text-cyan-400 block mb-2">STEP 01</span>
-                    <p className="text-xs font-bold text-neutral-400">Connect Wallet & Deposit SOL into Vault.</p>
+                    <p className="text-xs font-bold text-neutral-400">Connect Wallet & Select Mode.</p>
                   </div>
                   <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-red-500/50 transition-colors">
                     <span className="text-[10px] font-black text-red-500 block mb-2">STEP 02</span>
@@ -372,9 +441,7 @@ export default function App() {
             {gameState === 'playing' && (
               <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl h-full max-h-[580px] flex">
                 <div className="w-full bg-[#0c0c14]/95 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
-                  {/* IMAGE PLACEHOLDER (4:3) */}
                   <div className="w-full md:w-[45%] bg-black relative overflow-hidden group">
-                     {/* Local Image Placeholder Container */}
                      <div className={`absolute inset-0 bg-gradient-to-br ${SUPER_BOWL_DECK[currentIdx].color} to-black opacity-80`} />
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
@@ -386,7 +453,6 @@ export default function App() {
                      <div className="absolute inset-0 border-r border-white/5" />
                   </div>
 
-                  {/* BETTING UI */}
                   <div className="flex-1 p-8 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-6">
@@ -517,7 +583,7 @@ export default function App() {
         </aside>
       </main>
 
-      {/* FOOTER TICKER */}
+      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
           {[1,2,3].map(i => (
@@ -537,26 +603,43 @@ export default function App() {
         </div>
       </footer>
 
-      {/* DASHBOARD MODAL - UPGRADED UI */}
+      {/* MODALS */}
       <AnimatePresence>
+        {showWalletSelect && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWalletSelect(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-lg shadow-2xl">
+              <h3 className="text-2xl font-black italic uppercase text-white mb-8 text-center">Select Provider</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <button onClick={() => connectWallet('phantom')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-purple-500 transition-all text-center group">
+                  <span className="text-[10px] font-black text-purple-400 block mb-1">PHANTOM</span>
+                  <p className="text-xs font-black text-white italic uppercase">Solana Native</p>
+                </button>
+                <button onClick={() => connectWallet('metamask')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-orange-500 transition-all text-center group">
+                  <span className="text-[10px] font-black text-orange-500 block mb-1">METAMASK</span>
+                  <p className="text-xs font-black text-white italic uppercase">Solana Snap</p>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
                 <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
               </div>
-              
               <div className="flex flex-col gap-6">
                 <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                   <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletType === 'metamask' ? 'MetaMask' : 'Phantom'}</span>
-                  <div className="flex items-center gap-3">
-                    <Wallet2 className="w-5 h-5 text-cyan-400 flex-shrink-0" />
-                    <span className="text-sm md:text-lg font-black text-white break-all leading-tight">{walletAddress}</span>
+                  <div className="flex items-center gap-2">
+                    <Wallet2 className="w-4 h-4 text-cyan-400" />
+                    <span className="text-lg font-black text-white">{walletAddress}</span>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-6 rounded-2xl bg-black border border-white/5">
                     <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
@@ -567,50 +650,26 @@ export default function App() {
                     <span className="text-2xl font-black text-green-400">{winnings.toFixed(2)} SOL</span>
                   </div>
                 </div>
-
-                {/* Deposit/Withdraw Section */}
                 <div className="flex flex-col gap-4">
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Amount SOL" 
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors"
-                    />
-                    <button onClick={handleDeposit} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2">
-                      <ArrowDownCircle className="w-4 h-4" /> Deposit
-                    </button>
+                    <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
+                    <button onClick={handleDeposit} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2"><ArrowDownCircle className="w-4 h-4" /> Deposit</button>
                   </div>
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Amount SOL" 
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors"
-                    />
-                    <button onClick={handleWithdraw} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2">
-                      <ArrowUpCircle className="w-4 h-4" /> Withdraw
-                    </button>
+                    <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
+                    <button onClick={handleWithdraw} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2"><ArrowUpCircle className="w-4 h-4" /> Withdraw</button>
                   </div>
                 </div>
-
-                <button onClick={disconnectWallet} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2">
-                  <LogOut className="w-3 h-3" /> Disconnect Wallet
-                </button>
+                <button onClick={disconnectWallet} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* LIVE FEED MODAL - UPGRADED VISUALS */}
-      <AnimatePresence>
         {showLiveFeed && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-6 md:p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col overflow-hidden">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col">
               <div className="flex justify-between items-center mb-6 flex-none border-b border-white/5 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]" />
@@ -640,61 +699,25 @@ export default function App() {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* ENTRY MODAL - ADDED METAMASK BUTTON */}
-      <AnimatePresence>
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
               <div className="text-center mb-10">
                 <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
                 <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
                 <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
               </div>
-              <div className="flex flex-col gap-6">
-                {!walletAddress ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <button 
-                      onClick={() => connectWallet('phantom')} 
-                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-purple-500 transition-all text-center group"
-                    >
-                      <span className="text-[10px] font-black text-purple-400 block mb-1">PHANTOM</span>
-                      <p className="text-xs font-black text-white italic uppercase">Solana Native</p>
-                    </button>
-                    <button 
-                      onClick={() => connectWallet('metamask')} 
-                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-orange-500 transition-all text-center group"
-                    >
-                      <span className="text-[10px] font-black text-orange-500 block mb-1">METAMASK</span>
-                      <p className="text-xs font-black text-white italic uppercase">Solana Snap</p>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div onClick={() => { setIsRealMode(true); setGameState('playing'); setShowEntryModal(false); }} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
-                      <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
-                      <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
-                    </div>
-                    <button 
-                      onClick={() => { setIsRealMode(false); setGameState('playing'); setShowEntryModal(false); }} 
-                      className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all"
-                    >
-                      <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
-                      <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
-                    </button>
-                  </div>
-                )}
-                
-                {!walletAddress && (
-                  <button 
-                    onClick={() => { setIsRealMode(false); setGameState('playing'); setShowEntryModal(false); }}
-                    className="text-[9px] font-black text-neutral-500 hover:text-white uppercase tracking-widest text-center"
-                  >
-                    Continue to Simulator (No Wallet)
-                  </button>
-                )}
+              <div className="grid grid-cols-2 gap-4">
+                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
+                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
+                  <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
+                </div>
+                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
+                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
+                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
+                </button>
               </div>
             </motion.div>
           </div>
@@ -706,36 +729,10 @@ export default function App() {
         .animate-ticker { animation: ticker 50s linear infinite; }
         .custom-scrollbar::-webkit-scrollbar { width: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        
-        html, body { 
-          margin: 0; 
-          padding: 0; 
-          height: 100vh; 
-          width: 100vw; 
-          overflow: hidden; 
-          background-color: #020205; 
-          font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        }
-
-        /* Prevent all scrolling except sidebar on desktop */
-        @media (min-width: 1024px) {
-          .h-screen { overflow: hidden; }
-        }
-
-        @media (max-width: 1023px) {
-          main { 
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            height: calc(100vh - 112px); /* Ticker + Header */
-          }
-          section { flex: 1 0 auto; min-height: 500px; }
-        }
-
-        @media (max-width: 639px) {
-          .xs\\:hidden { display: block; }
-          .xs\\:inline { display: none; }
-        }
+        html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; overflow: hidden; background-color: #020205; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        @media (min-width: 1024px) { .h-screen { overflow: hidden; } }
+        @media (max-width: 1023px) { main { overflow-y: auto; display: flex; flex-direction: column; height: calc(100vh - 112px); } section { flex: 1 0 auto; min-height: 500px; } }
+        @media (max-width: 639px) { .xs\\:hidden { display: block; } .xs\\:inline { display: none; } }
       `}} />
     </div>
   );
