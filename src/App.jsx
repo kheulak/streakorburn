@@ -1,4 +1,6 @@
 import { WalletConnectionProvider } from './contexts/WalletConnectionProvider';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -66,8 +68,8 @@ function GameContent() {
   const [streak, setStreak] = useState(0);
   
   // Connection State (Load from localStorage)
-  const [walletAddress, setWalletAddress] = useState(() => localStorage.getItem('sob_wallet_addr') || null);
-  const [walletType, setWalletType] = useState(() => localStorage.getItem('sob_wallet_type') || null);
+  const { publicKey } = useWallet();
+  const walletAddress = publicKey ? publicKey.toString() : null;
   
   // Mode State (Load from localStorage)
   const [isRealMode, setIsRealMode] = useState(() => localStorage.getItem('sob_mode') === 'real');
@@ -337,13 +339,9 @@ function GameContent() {
               <span>{walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}</span>
             </button>
           ) : (
-            <button 
-              onClick={() => setShowEntryModal(true)}
-              className="px-5 py-2.5 rounded-xl bg-white/5 border border-white/20 text-white font-black text-[9px] uppercase tracking-widest hover:bg-white hover:text-black hover:border-white transition-all duration-300 flex items-center gap-2"
-            >
-              <Wallet2 className="w-3.5 h-3.5" />
-              <span>Connect Wallet</span>
-            </button>
+          <div className="scale-75 origin-right">
+            <WalletMultiButton />
+          </div>
           )}
 
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
