@@ -1,7 +1,8 @@
 import { WalletConnectionProvider } from './contexts/WalletConnectionProvider';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import React, { useState, useEffect, useMemo } from 'react';
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
@@ -25,6 +26,11 @@ import {
   ArrowUpCircle,
   History
 } from 'lucide-react';
+
+// --- CONFIGURATION ---
+// PASTE YOUR "BANK" WALLET ADDRESS HERE BETWEEN THE QUOTES
+const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
+// ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
   <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -62,17 +68,18 @@ function GameContent() {
   const [streak, setStreak] = useState(0);
   
   // --- NEW WALLET CONNECTION LOGIC ---
-  // We get the wallet info directly from the hook now!
-  const { publicKey, wallet, disconnect } = useWallet();
+  const { publicKey, wallet, disconnect, sendTransaction } = useWallet();
+  const { connection } = useConnection();
+  
   const walletAddress = publicKey ? publicKey.toString() : null;
   const walletName = wallet?.adapter?.name || 'Solana Wallet';
   
-  // Mode State (Load from localStorage)
+  // Mode State
   const [isRealMode, setIsRealMode] = useState(() => localStorage.getItem('sob_mode') === 'real');
 
   // Balances
   const [demoBalance, setDemoBalance] = useState(10.0);
-  const [vaultBalance, setVaultBalance] = useState(0.0);
+  const [vaultBalance, setVaultBalance] = useState(0.0); // This represents user's credit in the app
   const [winnings, setWinnings] = useState(0.0);
 
   // Dashboard Inputs
@@ -84,6 +91,7 @@ function GameContent() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For transaction loading state
 
   // Gameplay
   const [activeLeverage, setActiveLeverage] = useState(2);
@@ -93,35 +101,21 @@ function GameContent() {
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
   // --- PERSISTENCE EFFECTS ---
-  
-  // 1. Save Session Status (Only Mode, Wallet persists automatically)
   useEffect(() => {
     if (walletAddress) {
       localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
-    } else {
-      localStorage.removeItem('sob_mode');
     }
   }, [walletAddress, isRealMode]);
 
-  // 2. Load/Save Wallet Specific Balances
   useEffect(() => {
-    if (walletAddress) {
-      if (isRealMode) {
-        // Real mode logic later
-      } else {
-        // Load Sim Balance for this specific wallet
-        const savedSim = localStorage.getItem(`sob_sim_bal_${walletAddress}`);
-        const savedStreak = localStorage.getItem(`sob_sim_streak_${walletAddress}`);
-        
-        if (savedSim) setDemoBalance(parseFloat(savedSim));
-        else setDemoBalance(10.0); 
-
-        if (savedStreak) setStreak(parseInt(savedStreak));
-      }
+    if (walletAddress && !isRealMode) {
+      const savedSim = localStorage.getItem(`sob_sim_bal_${walletAddress}`);
+      const savedStreak = localStorage.getItem(`sob_sim_streak_${walletAddress}`);
+      if (savedSim) setDemoBalance(parseFloat(savedSim));
+      if (savedStreak) setStreak(parseInt(savedStreak));
     }
   }, [walletAddress, isRealMode]);
 
-  // 3. Auto-Save Sim Balance
   useEffect(() => {
     if (walletAddress && !isRealMode) {
       localStorage.setItem(`sob_sim_bal_${walletAddress}`, demoBalance.toString());
@@ -129,8 +123,6 @@ function GameContent() {
     }
   }, [demoBalance, streak, walletAddress, isRealMode]);
 
-
-  // Timer Logic
   useEffect(() => {
     const timer = setInterval(() => {
       const distance = targetDate - new Date().getTime();
@@ -152,29 +144,64 @@ function GameContent() {
 
   const handleModeSelect = (mode) => {
     if (!walletAddress) {
-      // If they haven't connected yet, just alert them to use the main button
-      alert("Please connect your wallet first using the 'Select Wallet' button!");
+      alert("Please connect your wallet first!");
       return;
     }
-    
     setIsRealMode(mode === 'real');
     setGameState('playing');
     setShowEntryModal(false);
   };
 
-  const handleDeposit = () => {
-    if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return;
-    setVaultBalance(prev => prev + parseFloat(depositAmount));
-    setDepositAmount('');
-    alert(`Successfully deposited ${depositAmount} SOL to Vault.`);
+  // --- REAL DEPOSIT LOGIC ---
+  const handleDeposit = async () => {
+    if (!publicKey) return alert("Connect wallet first!");
+    if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return alert("Enter valid amount");
+    
+    // Check if House Wallet is set
+    if (HOUSE_WALLET_ADDRESS === "REPLACE_WITH_YOUR_WALLET_ADDRESS") {
+       return alert("DEV ERROR: Please set the HOUSE_WALLET_ADDRESS in App.jsx code!");
+    }
+
+    try {
+        setIsLoading(true);
+        const amountSOL = parseFloat(depositAmount);
+        const housePubkey = new PublicKey(HOUSE_WALLET_ADDRESS);
+
+        // 1. Create Transaction
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: publicKey,
+                toPubkey: housePubkey,
+                lamports: amountSOL * LAMPORTS_PER_SOL,
+            })
+        );
+
+        // 2. Send & Confirm
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = publicKey;
+
+        const signature = await sendTransaction(transaction, connection);
+        
+        // Wait for confirmation
+        await connection.confirmTransaction(signature, 'processed');
+
+        // 3. Update UI Balance
+        setVaultBalance(prev => prev + amountSOL);
+        setDepositAmount('');
+        alert(`Success! Deposited ${amountSOL} SOL. Tx: ${signature.slice(0,8)}...`);
+
+    } catch (error) {
+        console.error("Deposit Error:", error);
+        alert("Transaction Failed: " + error.message);
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleWithdraw = () => {
-    if (!withdrawAmount || isNaN(withdrawAmount) || parseFloat(withdrawAmount) <= 0) return;
-    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Vault Balance");
-    setVaultBalance(prev => prev - parseFloat(withdrawAmount));
-    setWithdrawAmount('');
-    alert(`Withdrawing ${withdrawAmount} SOL to wallet...`);
+    // WITHDRAW IS HARDER - NEEDS BACKEND API. (We will do this next)
+    alert("Withdrawals require the API backend (Coming in Step 7!)");
   };
 
   // --- GAME LOGIC ---
@@ -258,7 +285,7 @@ function GameContent() {
         </div>
 
         <div className="flex items-center gap-6">
-          {/* BALANCE DISPLAY - ONLY SHOW IF CONNECTED */}
+          {/* BALANCE DISPLAY */}
           {walletAddress && (
             <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
               <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
@@ -279,7 +306,6 @@ function GameContent() {
               <span>{walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}</span>
             </button>
           ) : (
-             // THIS IS THE NEW WALLET BUTTON
              <div className="scale-75 origin-right">
                 <WalletMultiButton />
              </div>
@@ -574,7 +600,10 @@ function GameContent() {
                 <div className="flex flex-col gap-4">
                   <div className="flex gap-2">
                     <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
-                    <button onClick={handleDeposit} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2"><ArrowDownCircle className="w-4 h-4" /> Deposit</button>
+                    <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
+                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
+                        {isLoading ? 'Processing...' : 'Deposit'}
+                    </button>
                   </div>
                   <div className="flex gap-2">
                     <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
