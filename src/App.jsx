@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
   Lock,
-  BarChart3,
   Menu,
   X,
   Trophy,
@@ -16,20 +15,15 @@ import {
   Twitter,
   Coins,
   ShieldCheck,
-  MousePointer2,
-  LineChart,
-  History,
   TrendingUp,
   Activity,
   Mic2,
   Music,
-  ExternalLink,
   User,
   LogOut,
   ArrowDownCircle,
   ArrowUpCircle,
-  AlertCircle,
-  Globe
+  History
 } from 'lucide-react';
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -62,14 +56,16 @@ const PREVIEW_MARKETS = [
 ];
 
 function GameContent() {
-  // --- STATE INITIALIZATION WITH PERSISTENCE ---
+  // --- STATE INITIALIZATION ---
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [streak, setStreak] = useState(0);
   
-  // Connection State (Load from localStorage)
-  const { publicKey } = useWallet();
+  // --- NEW WALLET CONNECTION LOGIC ---
+  // We get the wallet info directly from the hook now!
+  const { publicKey, wallet, disconnect } = useWallet();
   const walletAddress = publicKey ? publicKey.toString() : null;
+  const walletName = wallet?.adapter?.name || 'Solana Wallet';
   
   // Mode State (Load from localStorage)
   const [isRealMode, setIsRealMode] = useState(() => localStorage.getItem('sob_mode') === 'real');
@@ -88,7 +84,6 @@ function GameContent() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
-  const [showWalletSelect, setShowWalletSelect] = useState(false); // New sub-modal state
 
   // Gameplay
   const [activeLeverage, setActiveLeverage] = useState(2);
@@ -99,39 +94,34 @@ function GameContent() {
 
   // --- PERSISTENCE EFFECTS ---
   
-  // 1. Save Session Status
+  // 1. Save Session Status (Only Mode, Wallet persists automatically)
   useEffect(() => {
     if (walletAddress) {
-      localStorage.setItem('sob_wallet_addr', walletAddress);
-      localStorage.setItem('sob_wallet_type', walletType);
       localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
     } else {
-      localStorage.removeItem('sob_wallet_addr');
-      localStorage.removeItem('sob_wallet_type');
       localStorage.removeItem('sob_mode');
     }
-  }, [walletAddress, walletType, isRealMode]);
+  }, [walletAddress, isRealMode]);
 
   // 2. Load/Save Wallet Specific Balances
   useEffect(() => {
     if (walletAddress) {
       if (isRealMode) {
-        // In a real app, this would fetch from chain. 
-        // For now we assume 0 or check if we saved a mock vault balance (optional)
+        // Real mode logic later
       } else {
         // Load Sim Balance for this specific wallet
         const savedSim = localStorage.getItem(`sob_sim_bal_${walletAddress}`);
         const savedStreak = localStorage.getItem(`sob_sim_streak_${walletAddress}`);
         
         if (savedSim) setDemoBalance(parseFloat(savedSim));
-        else setDemoBalance(10.0); // Default start for new wallet
+        else setDemoBalance(10.0); 
 
         if (savedStreak) setStreak(parseInt(savedStreak));
       }
     }
   }, [walletAddress, isRealMode]);
 
-  // 3. Auto-Save Sim Balance when it changes
+  // 3. Auto-Save Sim Balance
   useEffect(() => {
     if (walletAddress && !isRealMode) {
       localStorage.setItem(`sob_sim_bal_${walletAddress}`, demoBalance.toString());
@@ -158,60 +148,12 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- WALLET LOGIC ---
-  const connectWallet = async (type) => {
-    let address = null;
-    
-    if (type === 'phantom') {
-      const { solana } = window;
-      if (solana && solana.isPhantom) {
-        try {
-          const response = await solana.connect();
-          address = response.publicKey.toString();
-        } catch (err) {
-          console.error("User rejected connection", err);
-        }
-      } else {
-        alert("Solana wallet not found! Please install Phantom.");
-        window.open("https://phantom.app/", "_blank");
-        return;
-      }
-    } else if (type === 'metamask') {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          address = "Sol" + accounts[0].slice(2); 
-        } catch (err) {
-          console.error(err);
-        }
-      } else {
-        alert("MetaMask not found!");
-        return;
-      }
-    }
-
-    if (address) {
-      setWalletAddress(address);
-      setWalletType(type);
-      setShowWalletSelect(false);
-      // If we were in the entry modal flow, we don't close it yet, we let user pick mode if not already picked
-      // If user clicked "Connect" from header, we just connect.
-    }
-  };
-
-  const disconnectWallet = () => {
-    setWalletAddress(null);
-    setWalletType(null);
-    setIsRealMode(false);
-    setGameState('landing');
-    setShowDashboard(false);
-    setIsMenuOpen(false);
-    // State cleans up via useEffect
-  };
+  // --- MODES & ACTIONS ---
 
   const handleModeSelect = (mode) => {
     if (!walletAddress) {
-      setShowWalletSelect(true); // Force connect first
+      // If they haven't connected yet, just alert them to use the main button
+      alert("Please connect your wallet first using the 'Select Wallet' button!");
       return;
     }
     
@@ -220,7 +162,6 @@ function GameContent() {
     setShowEntryModal(false);
   };
 
-  // --- TRANSACTIONS ---
   const handleDeposit = () => {
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return;
     setVaultBalance(prev => prev + parseFloat(depositAmount));
@@ -276,7 +217,6 @@ function GameContent() {
     setGameState('landing');
     setCurrentIdx(0);
     setStreak(0);
-    // Do NOT reset demo balance here, it should persist per user
     setShowEntryModal(false);
     setIsMenuOpen(false);
   };
@@ -339,9 +279,10 @@ function GameContent() {
               <span>{walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}</span>
             </button>
           ) : (
-          <div className="scale-75 origin-right">
-            <WalletMultiButton />
-          </div>
+             // THIS IS THE NEW WALLET BUTTON
+             <div className="scale-75 origin-right">
+                <WalletMultiButton />
+             </div>
           )}
 
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
@@ -382,7 +323,7 @@ function GameContent() {
                 <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
                   <User className="w-4 h-4" /> MY PROFILE
                 </button>
-                <button onClick={disconnectWallet} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
+                <button onClick={() => disconnect()} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
                   <LogOut className="w-4 h-4" /> DISCONNECT
                 </button>
               </>
@@ -443,11 +384,11 @@ function GameContent() {
                   <div className="w-full md:w-[45%] bg-black relative overflow-hidden group">
                      <div className={`absolute inset-0 bg-gradient-to-br ${SUPER_BOWL_DECK[currentIdx].color} to-black opacity-80`} />
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
-                          {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-2">REPLACE WITH ASSET</span>
-                        <span className="text-[8px] font-bold text-white/30">4:3 RATIO • {SUPER_BOWL_DECK[currentIdx].category}</span>
+                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
+                         {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
+                       </div>
+                       <span className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-2">REPLACE WITH ASSET</span>
+                       <span className="text-[8px] font-bold text-white/30">4:3 RATIO • {SUPER_BOWL_DECK[currentIdx].category}</span>
                      </div>
                      <div className="absolute inset-0 border-r border-white/5" />
                   </div>
@@ -604,25 +545,6 @@ function GameContent() {
 
       {/* MODALS */}
       <AnimatePresence>
-        {showWalletSelect && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowWalletSelect(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-lg shadow-2xl">
-              <h3 className="text-2xl font-black italic uppercase text-white mb-8 text-center">Select Provider</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => connectWallet('phantom')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-purple-500 transition-all text-center group">
-                  <span className="text-[10px] font-black text-purple-400 block mb-1">PHANTOM</span>
-                  <p className="text-xs font-black text-white italic uppercase">Solana Native</p>
-                </button>
-                <button onClick={() => connectWallet('metamask')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white/10 hover:border-orange-500 transition-all text-center group">
-                  <span className="text-[10px] font-black text-orange-500 block mb-1">METAMASK</span>
-                  <p className="text-xs font-black text-white italic uppercase">Solana Snap</p>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -633,7 +555,7 @@ function GameContent() {
               </div>
               <div className="flex flex-col gap-6">
                 <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletType === 'metamask' ? 'MetaMask' : 'Phantom'}</span>
+                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletName}</span>
                   <div className="flex items-center gap-2">
                     <Wallet2 className="w-4 h-4 text-cyan-400" />
                     <span className="text-lg font-black text-white">{walletAddress}</span>
@@ -659,7 +581,7 @@ function GameContent() {
                     <button onClick={handleWithdraw} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2"><ArrowUpCircle className="w-4 h-4" /> Withdraw</button>
                   </div>
                 </div>
-                <button onClick={disconnectWallet} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
+                <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
             </motion.div>
           </div>
@@ -680,17 +602,17 @@ function GameContent() {
                 {[...Array(15)].map((_, i) => (
                   <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-white/[0.02] to-transparent border border-white/5 hover:border-cyan-500/20 transition-colors">
                     <div className="flex items-center gap-3">
-                       <div className={`p-2 rounded-lg ${Math.random() > 0.5 ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                         {Math.random() > 0.5 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
-                       </div>
-                       <div className="flex flex-col">
-                         <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
-                         <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'VAULT DEPOSIT'}</span>
-                       </div>
+                        <div className={`p-2 rounded-lg ${Math.random() > 0.5 ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                          {Math.random() > 0.5 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
+                          <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'VAULT DEPOSIT'}</span>
+                        </div>
                     </div>
                     <div className="text-right">
-                       <span className="text-xs font-black text-cyan-400 block">{(Math.random() * 5).toFixed(2)} SOL</span>
-                       <span className="text-[8px] font-bold text-neutral-600">Just now</span>
+                        <span className="text-xs font-black text-cyan-400 block">{(Math.random() * 5).toFixed(2)} SOL</span>
+                        <span className="text-[8px] font-bold text-neutral-600">Just now</span>
                     </div>
                   </div>
                 ))}
@@ -736,6 +658,7 @@ function GameContent() {
     </div>
   );
 }
+
 export default function App() {
   return (
     <WalletConnectionProvider>
