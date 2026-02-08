@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// !!! IMPORTANT: PASTE YOUR WALLET ADDRESS HERE AGAIN !!!
+// !!! IMPORTANT: PASTE YOUR WALLET ADDRESS HERE !!!
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
@@ -152,7 +152,7 @@ function GameContent() {
     setShowEntryModal(false);
   };
 
-  // --- REAL DEPOSIT LOGIC (UPDATED FOR STABILITY) ---
+  // --- STRICT SECURE DEPOSIT LOGIC ---
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return alert("Enter valid amount");
@@ -166,7 +166,7 @@ function GameContent() {
         const amountSOL = parseFloat(depositAmount);
         const housePubkey = new PublicKey(HOUSE_WALLET_ADDRESS);
 
-        // 1. Get latest blockhash (The "Ticket" for the transaction)
+        // 1. Get latest blockhash (The "Ticket")
         const latestBlockhash = await connection.getLatestBlockhash();
 
         // 2. Create Transaction
@@ -182,26 +182,33 @@ function GameContent() {
             })
         );
 
-        // 3. Send & Confirm (The "Modern" Way)
+        // 3. Send the transaction (Ask Wallet to Sign)
         const signature = await sendTransaction(transaction, connection);
-        
-        console.log("Sent! Signature:", signature);
-        
-        // Wait for confirmation using the new strategy
-        await connection.confirmTransaction({
+        console.log("Transaction Broadcasted:", signature);
+
+        // 4. SECURITY CHECK: Wait for Blockchain Confirmation
+        // We do NOT update the balance until this line returns successfully.
+        const confirmation = await connection.confirmTransaction({
             blockhash: latestBlockhash.blockhash,
             lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
             signature: signature
         }, 'confirmed');
 
-        // 4. Update UI Balance
+        // 5. DOUBLE CHECK: Did it actually succeed?
+        if (confirmation.value.err) {
+            throw new Error("Transaction failed on-chain! Balance not updated.");
+        }
+
+        // 6. ONLY NOW update the UI Balance
+        // If the code reaches here, money has definitely moved.
         setVaultBalance(prev => prev + amountSOL);
         setDepositAmount('');
-        alert(`Success! Deposited ${amountSOL} SOL. Your Streak Vault is funded!`);
+        alert(`Secure Deposit Confirmed! ${amountSOL} SOL added to Vault.`);
 
     } catch (error) {
-        console.error("Deposit Error:", error);
-        alert("Transaction Failed: " + error.message);
+        console.error("Deposit Failed:", error);
+        // Do not update balance here.
+        alert("Transaction Failed or Cancelled. No funds were taken.");
     } finally {
         setIsLoading(false);
     }
@@ -618,40 +625,6 @@ function GameContent() {
                   </div>
                 </div>
                 <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        {showLiveFeed && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col">
-              <div className="flex justify-between items-center mb-6 flex-none border-b border-white/5 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]" />
-                  <h3 className="text-xl font-black italic uppercase text-white tracking-tight">Arena Feed</h3>
-                </div>
-                <button onClick={() => setShowLiveFeed(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><X className="w-4 h-4 text-neutral-400 hover:text-white" /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
-                {[...Array(15)].map((_, i) => (
-                  <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-white/[0.02] to-transparent border border-white/5 hover:border-cyan-500/20 transition-colors">
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${Math.random() > 0.5 ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                          {Math.random() > 0.5 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
-                          <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'VAULT DEPOSIT'}</span>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <span className="text-xs font-black text-cyan-400 block">{(Math.random() * 5).toFixed(2)} SOL</span>
-                        <span className="text-[8px] font-bold text-neutral-600">Just now</span>
-                    </div>
-                  </div>
-                ))}
               </div>
             </motion.div>
           </div>
