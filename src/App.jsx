@@ -12,7 +12,7 @@ import {
 
 // --- CONFIGURATION ---
 // !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
-const HOUSE_WALLET_ADDRESS = "REPLACE_WITH_YOUR_WALLET_ADDRESS"; 
+const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -268,7 +268,7 @@ function GameContent() {
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || parseFloat(depositAmount) <= 0) return alert("Invalid amount");
-    if (HOUSE_WALLET_ADDRESS === "REPLACE_WITH_YOUR_WALLET_ADDRESS") return alert("Dev Error: Address not set");
+    if (HOUSE_WALLET_ADDRESS === "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt") return alert("Dev Error: Address not set");
 
     try {
         setIsLoading(true);
