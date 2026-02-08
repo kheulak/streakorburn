@@ -24,12 +24,13 @@ import {
   LogOut,
   ArrowDownCircle,
   ArrowUpCircle,
-  History
+  History,
+  ExternalLink
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 // !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
-const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
+const HOUSE_WALLET_ADDRESS = "REPLACE_WITH_YOUR_WALLET_ADDRESS"; 
 // ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -46,13 +47,13 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
   </svg>
 );
 
-const SUPER_BOWL_DECK = [
-  { id: 1, question: "Seahawks Win Toss?", category: "PRE-GAME", color: "from-blue-600/20", img: "https://images.unsplash.com/photo-1596720426673-e47744bd702e?q=80&w=800&auto=format&fit=crop" },
-  { id: 2, question: "Puth Anthem > 2:05?", category: "NATIONAL ANTHEM", color: "from-red-600/20", img: "https://images.unsplash.com/photo-1517174637996-52822268482b?q=80&w=800&auto=format&fit=crop" },
-  { id: 3, question: "Bad Bunny Opens with 'Monaco'?", category: "HALFTIME SHOW", color: "from-purple-600/20", img: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=800&auto=format&fit=crop" },
-  { id: 4, question: "Patriots Lead at Half?", category: "GAME STATS", color: "from-blue-900/20", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800&auto=format&fit=crop" },
-  { id: 5, question: "Seahawks Over 24.5 Pts?", category: "OVER/UNDER", color: "from-emerald-600/20", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800&auto=format&fit=crop" },
-  { id: 6, question: "Bad Bunny Guest: Post Malone?", category: "NOVELTY", color: "from-pink-600/20", img: "https://images.unsplash.com/photo-1544446337-123472099318?q=80&w=800&auto=format&fit=crop" }
+// Fallback Data (If API fails, this loads so the UI doesn't break)
+const FALLBACK_DECK = [
+  { id: 1, question: "Seahawks Win Toss?", category: "PRE-GAME", color: "from-blue-600/20", img: "https://images.unsplash.com/photo-1596720426673-e47744bd702e?q=80&w=800&auto=format&fit=crop", odds: 0.50 },
+  { id: 2, question: "Puth Anthem > 2:05?", category: "NATIONAL ANTHEM", color: "from-red-600/20", img: "https://images.unsplash.com/photo-1517174637996-52822268482b?q=80&w=800&auto=format&fit=crop", odds: 0.50 },
+  { id: 3, question: "Bad Bunny Opens with 'Monaco'?", category: "HALFTIME SHOW", color: "from-purple-600/20", img: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=800&auto=format&fit=crop", odds: 0.50 },
+  { id: 4, question: "Patriots Lead at Half?", category: "GAME STATS", color: "from-blue-900/20", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800&auto=format&fit=crop", odds: 0.50 },
+  { id: 5, question: "Seahawks Over 24.5 Pts?", category: "OVER/UNDER", color: "from-emerald-600/20", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800&auto=format&fit=crop", odds: 0.50 },
 ];
 
 const PREVIEW_MARKETS = [
@@ -67,7 +68,11 @@ function GameContent() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [streak, setStreak] = useState(0);
   
-  // --- NEW WALLET CONNECTION LOGIC ---
+  // Market Data State
+  const [marketDeck, setMarketDeck] = useState(FALLBACK_DECK);
+  const [isMarketsLoading, setIsMarketsLoading] = useState(true);
+
+  // Connection State
   const { publicKey, wallet, disconnect, sendTransaction } = useWallet();
   const { connection } = useConnection();
   
@@ -91,7 +96,7 @@ function GameContent() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For transaction loading state
 
   // Gameplay
   const [activeLeverage, setActiveLeverage] = useState(2);
@@ -99,6 +104,56 @@ function GameContent() {
   
   const targetDate = useMemo(() => new Date('2026-02-08T18:30:00-05:00').getTime(), []);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
+
+  // --- 1. FETCH POLYMARKET DATA ---
+  useEffect(() => {
+    async function fetchPolymarket() {
+      try {
+        const res = await fetch('/api/markets');
+        const data = await res.json();
+        
+        if (data && data.length > 0) {
+          // Map API data to our Deck format
+          const mappedDeck = data.map((m, index) => ({
+            id: index,
+            question: m.question,
+            category: "SUPER BOWL LIVE",
+            color: "from-blue-600/20", // You can vary this based on index if you want
+            img: m.img,
+            odds: m.price_yes, // Use the YES price as probability
+            marketId: m.id
+          }));
+          setMarketDeck(mappedDeck);
+        }
+      } catch (error) {
+        console.error("Failed to load markets, using fallback", error);
+      } finally {
+        setIsMarketsLoading(false);
+      }
+    }
+    fetchPolymarket();
+  }, []);
+
+  // --- 2. FETCH REAL BALANCE FROM SERVER ---
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (walletAddress && isRealMode) {
+        try {
+          const res = await fetch(`/api/balance?userAddress=${walletAddress}`);
+          const data = await res.json();
+          if (data.success) {
+            setVaultBalance(data.balance);
+          }
+        } catch (e) {
+          console.error("Failed to fetch balance", e);
+        }
+      }
+    };
+    
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 10000); // Update every 10s
+    return () => clearInterval(interval);
+  }, [walletAddress, isRealMode]);
 
   // --- PERSISTENCE EFFECTS ---
   useEffect(() => {
@@ -121,6 +176,7 @@ function GameContent() {
     }
   }, [demoBalance, streak, walletAddress, isRealMode]);
 
+  // Timer Logic
   useEffect(() => {
     const timer = setInterval(() => {
       const distance = targetDate - new Date().getTime();
@@ -138,6 +194,8 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
+  // --- ACTIONS ---
+
   const handleModeSelect = (mode) => {
     if (!walletAddress) {
       alert("Please connect your wallet first!");
@@ -148,146 +206,120 @@ function GameContent() {
     setShowEntryModal(false);
   };
 
-  // --- 1. SECURE DEPOSIT (FRONTEND -> BACKEND) ---
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return alert("Enter valid amount");
-    
-    if (HOUSE_WALLET_ADDRESS === "REPLACE_WITH_YOUR_WALLET_ADDRESS") {
-       return alert("DEV ERROR: Please set the HOUSE_WALLET_ADDRESS in App.jsx code!");
-    }
+    if (HOUSE_WALLET_ADDRESS === "REPLACE_WITH_YOUR_WALLET_ADDRESS") return alert("DEV ERROR: House Wallet not set");
 
     try {
         setIsLoading(true);
         const amountSOL = parseFloat(depositAmount);
         const housePubkey = new PublicKey(HOUSE_WALLET_ADDRESS);
-
         const latestBlockhash = await connection.getLatestBlockhash();
-
         const transaction = new Transaction({
             feePayer: publicKey,
             blockhash: latestBlockhash.blockhash,
             lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
-        }).add(
-            SystemProgram.transfer({
-                fromPubkey: publicKey,
-                toPubkey: housePubkey,
-                lamports: amountSOL * LAMPORTS_PER_SOL,
-            })
-        );
+        }).add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: housePubkey, lamports: amountSOL * LAMPORTS_PER_SOL }));
 
-        // A. Send transaction to Solana
         const signature = await sendTransaction(transaction, connection);
-        console.log("Transaction Broadcasted:", signature);
+        await connection.confirmTransaction({ blockhash: latestBlockhash.blockhash, lastValidBlockHeight: latestBlockhash.lastValidBlockHeight, signature: signature }, 'confirmed');
 
-        // B. Wait for confirmation
-        await connection.confirmTransaction({
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            signature: signature
-        }, 'confirmed');
-
-        // C. VERIFY WITH SERVER (Secure Ledger Update)
         const verifyResponse = await fetch('/api/deposit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                signature: signature,
-                userAddress: publicKey.toString()
-            })
+            body: JSON.stringify({ signature: signature, userAddress: publicKey.toString() })
         });
 
         const verifyData = await verifyResponse.json();
+        if (!verifyResponse.ok) throw new Error(verifyData.error || "Verification failed");
 
-        if (!verifyResponse.ok) {
-            throw new Error(verifyData.error || "Server verification failed");
-        }
-
-        // D. Update UI
-        setVaultBalance(prev => prev + amountSOL);
+        setVaultBalance(verifyData.newBalance);
         setDepositAmount('');
         alert(`Secure Deposit Confirmed! ${amountSOL} SOL added to Vault.`);
-
     } catch (error) {
         console.error("Deposit Failed:", error);
         alert("Deposit Failed: " + error.message);
-    } finally {
-        setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   };
 
-  // --- 2. SECURE WITHDRAW (FRONTEND REQUEST -> BACKEND API) ---
   const handleWithdraw = async () => {
     if (!publicKey) return alert("Connect wallet first!");
-    if (!withdrawAmount || isNaN(withdrawAmount) || parseFloat(withdrawAmount) <= 0) return alert("Enter valid amount");
-    
-    // Optimistic check (Server will do the real check)
-    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Vault Balance");
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return alert("Enter valid amount");
+    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Funds");
 
     try {
       setIsLoading(true);
-      
-      // Call our Secure Back Room
       const response = await fetch('/api/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userAddress: publicKey.toString(),
-          amount: parseFloat(withdrawAmount)
-        })
+        body: JSON.stringify({ userAddress: publicKey.toString(), amount: parseFloat(withdrawAmount) })
       });
-
       const data = await response.json();
-
       if (response.ok) {
         setVaultBalance(prev => prev - parseFloat(withdrawAmount));
         setWithdrawAmount('');
-        alert(`Withdrawal Success! Check your wallet. Tx: ${data.signature}`);
-      } else {
-        throw new Error(data.error || "Withdrawal failed");
-      }
-
-    } catch (error) {
-      console.error("Withdraw Error:", error);
-      alert("Withdraw Failed: " + error.message);
-    } finally {
-      setIsLoading(false);
-    }
+        alert(`Withdrawal Success! Tx: ${data.signature}`);
+      } else { throw new Error(data.error); }
+    } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
   };
 
-  const handleAction = (isYes) => {
-    const currentBalance = isRealMode ? vaultBalance : demoBalance;
-    
-    if (currentBalance < betAmount) {
-      if (isRealMode) {
-        setShowDashboard(true); 
-      } else {
-        alert("Demo bankrupt! Resetting balance to 10 SOL.");
-        setDemoBalance(10.0);
-      }
-      return;
+  // --- GAME ACTION ---
+  const handleAction = async (isYes) => {
+    const currentCard = marketDeck[currentIdx];
+    const probability = currentCard ? currentCard.odds : 0.5;
+
+    // DEMO MODE
+    if (!isRealMode) {
+        if (demoBalance < betAmount) { setDemoBalance(10.0); return alert("Demo Reset!"); }
+        
+        const isWin = Math.random() < probability; 
+        const standardPayout = betAmount / probability;
+        const profit = (standardPayout - betAmount) * activeLeverage;
+        
+        if (isWin) {
+            setStreak(prev => prev + 1);
+            setDemoBalance(prev => prev + betAmount + profit);
+            if (currentIdx === marketDeck.length - 1) setGameState('winner');
+            else setCurrentIdx(prev => prev + 1);
+        } else {
+            setDemoBalance(prev => Math.max(0, prev - betAmount));
+            setGameState('burned');
+        }
+        return;
     }
 
-    const isCorrect = Math.random() > 0.45; 
-    const winAmount = betAmount * activeLeverage * 0.4;
+    // REAL MODE
+    if (vaultBalance < betAmount) return setShowDashboard(true);
 
-    if (isCorrect) {
-      setStreak(prev => prev + 1);
-      if (isRealMode) {
-        setVaultBalance(prev => prev + winAmount);
-        setWinnings(prev => prev + winAmount);
-      } else {
-        setDemoBalance(prev => prev + winAmount);
-      }
+    try {
+        setIsLoading(true);
+        const response = await fetch('/api/bet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userAddress: walletAddress,
+                amount: betAmount,
+                leverage: activeLeverage,
+                prediction: isYes,
+                odds: probability 
+            })
+        });
 
-      if (currentIdx === SUPER_BOWL_DECK.length - 1) setGameState('winner');
-      else setCurrentIdx(prev => prev + 1);
-    } else {
-      if (isRealMode) setVaultBalance(prev => Math.max(0, prev - betAmount));
-      else setDemoBalance(prev => Math.max(0, prev - betAmount));
-      
-      setGameState('burned');
-    }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        setVaultBalance(data.newBalance);
+
+        if (data.isWin) {
+            setStreak(prev => prev + 1);
+            setWinnings(prev => prev + data.payout);
+            if (currentIdx === marketDeck.length - 1) setGameState('winner');
+            else setCurrentIdx(prev => prev + 1);
+        } else {
+            setGameState('burned');
+        }
+    } catch (error) { alert("Bet Error: " + error.message); } finally { setIsLoading(false); }
   };
 
   const handleReset = () => {
@@ -300,6 +332,7 @@ function GameContent() {
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
+      {/* BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#1e0b3d_0%,#020205_75%)]" />
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-red-600/[0.12] rounded-full blur-[120px]" />
@@ -307,6 +340,7 @@ function GameContent() {
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.1]" />
       </div>
 
+      {/* HEADER */}
       <nav className="flex-none px-6 py-4 flex justify-between items-center border-b border-white/10 bg-black/40 backdrop-blur-xl z-[100] h-16">
         <div className="flex items-center gap-10">
           <div onClick={() => setGameState('landing')} className="flex items-center gap-3 cursor-pointer group">
@@ -333,13 +367,14 @@ function GameContent() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* BALANCE DISPLAY */}
           {walletAddress && (
             <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
               <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
                 {isRealMode ? 'Vault Balance' : 'Sim Balance'}
               </span>
               <span className="text-xs font-black text-white tabular-nums">
-                {isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL
+                {isRealMode ? vaultBalance.toFixed(3) : demoBalance.toFixed(2)} SOL
               </span>
             </div>
           )}
@@ -364,7 +399,48 @@ function GameContent() {
         </div>
       </nav>
 
-      {/* DASHBOARD MODAL WITH DEPOSIT/WITHDRAW */}
+      {/* MOBILE MENU */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 z-[90] p-6 lg:hidden flex flex-col gap-4">
+            {walletAddress && (
+              <div className="flex flex-col pb-4 border-b border-white/10">
+                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Active Wallet</span>
+                <span className="text-sm font-black text-cyan-400">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                <div className="flex justify-between mt-2">
+                  <span className="text-[9px] font-black text-neutral-500 uppercase">
+                    {isRealMode ? 'Vault Balance' : 'Sim Balance'}
+                  </span>
+                  <span className="text-xs font-black text-white">{isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL</span>
+                </div>
+              </div>
+            )}
+            
+            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+              <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
+            </button>
+            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+              <Twitter className="w-4 h-4 text-[#1DA1F2]" /> TWITTER
+            </button>
+            <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
+              <Activity className="w-4 h-4 text-red-500" /> LIVE FEED
+            </button>
+
+            {walletAddress && (
+              <>
+                <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
+                  <User className="w-4 h-4" /> MY PROFILE
+                </button>
+                <button onClick={() => disconnect()} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
+                  <LogOut className="w-4 h-4" /> DISCONNECT
+                </button>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODALS */}
       <AnimatePresence>
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
@@ -385,11 +461,11 @@ function GameContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-6 rounded-2xl bg-black border border-white/5">
                     <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
-                    <span className="text-2xl font-black text-white">{vaultBalance.toFixed(2)} SOL</span>
+                    <span className="text-2xl font-black text-white">{vaultBalance.toFixed(3)} SOL</span>
                   </div>
                   <div className="p-6 rounded-2xl bg-black border border-white/5">
                     <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Total Winnings</span>
-                    <span className="text-2xl font-black text-green-400">{winnings.toFixed(2)} SOL</span>
+                    <span className="text-2xl font-black text-green-400">{winnings.toFixed(3)} SOL</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-4">
@@ -413,8 +489,30 @@ function GameContent() {
             </motion.div>
           </div>
         )}
+
+        {showEntryModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
+              <div className="text-center mb-10">
+                <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
+                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
+                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
+                  <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
+                </div>
+                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
+                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
+                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         
-        {/* OTHER MODALS (Entry, Live Feed) OMITTED FOR BREVITY - RETAIN ORIGINAL LOGIC */}
         {showLiveFeed && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -444,29 +542,6 @@ function GameContent() {
                     </div>
                   </div>
                 ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        {showEntryModal && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
-              <div className="text-center mb-10">
-                <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
-                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
-                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
-                  <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
-                </div>
-                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
-                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
-                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
-                </button>
               </div>
             </motion.div>
           </div>
@@ -522,13 +597,19 @@ function GameContent() {
               <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl h-full max-h-[580px] flex">
                 <div className="w-full bg-[#0c0c14]/95 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
                   <div className="w-full md:w-[45%] bg-black relative overflow-hidden group">
-                     <div className={`absolute inset-0 bg-gradient-to-br ${SUPER_BOWL_DECK[currentIdx].color} to-black opacity-80`} />
+                     {/* DYNAMIC IMAGE FROM API */}
+                     {marketDeck[currentIdx]?.img && <img src={marketDeck[currentIdx].img} className="absolute inset-0 w-full h-full object-cover opacity-60" />}
+                     <div className="absolute inset-0 bg-gradient-to-br from-black via-black/50 to-transparent" />
+                     
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
                          {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
                        </div>
-                       <span className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-2">REPLACE WITH ASSET</span>
-                       <span className="text-[8px] font-bold text-white/30">4:3 RATIO • {SUPER_BOWL_DECK[currentIdx].category}</span>
+                       {/* SHOW LIVE ODDS */}
+                       <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400 mb-2">
+                         LIVE ODDS: {(marketDeck[currentIdx]?.odds * 100).toFixed(0)}%
+                       </span>
+                       <span className="text-[8px] font-bold text-white/30">POLYMARKET DATA</span>
                      </div>
                      <div className="absolute inset-0 border-r border-white/5" />
                   </div>
@@ -552,9 +633,9 @@ function GameContent() {
                       </div>
 
                       <div className="min-h-[120px]">
-                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{SUPER_BOWL_DECK[currentIdx].category} MARKET</span>
+                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{marketDeck[currentIdx]?.category}</span>
                         <h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">
-                          {SUPER_BOWL_DECK[currentIdx].question}
+                          {marketDeck[currentIdx]?.question}
                         </h2>
                       </div>
                     </div>
@@ -608,6 +689,7 @@ function GameContent() {
           </AnimatePresence>
         </section>
 
+        {/* SIDEBAR */}
         <aside className="hidden lg:flex flex-col gap-5 min-h-0">
           <div className="flex-none flex items-center justify-between px-4">
              <div className="flex items-center gap-2">
@@ -662,6 +744,7 @@ function GameContent() {
         </aside>
       </main>
 
+      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
           {[1,2,3].map(i => (
