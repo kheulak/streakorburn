@@ -5,61 +5,58 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // We now accept 'odds' (probability) from the frontend
-  const { userAddress, amount, leverage, prediction, odds } = req.body;
+  // NOTE: Leverage removed as requested. 
+  // We strictly use the probability to determine payout.
+  const { userAddress, amount, prediction, odds } = req.body;
 
   try {
+    // 1. CONNECT TO DB (Using Vercel Keys)
     const redis = new Redis({
       url: process.env.KV_REST_API_URL,
       token: process.env.KV_REST_API_TOKEN,
     });
 
-    // 1. SECURITY: Check Balance
+    // 2. CHECK BALANCE
     const currentBalance = await redis.get(`balance:${userAddress}`);
     if (!currentBalance || parseFloat(currentBalance) < parseFloat(amount)) {
       return res.status(403).json({ error: 'Insufficient Funds' });
     }
 
-    // 2. DEDUCT BET
+    // 3. DEDUCT BET (BURN MECHANISM START)
+    // The money is gone immediately. You only get it back if you win.
     await redis.incrbyfloat(`balance:${userAddress}`, -parseFloat(amount));
 
-    // 3. DETERMINE WIN CHANCE (Based on REAL Polymarket Odds)
-    // If Polymarket says 60% (0.60), we use 0.60.
-    // HOUSE EDGE: We assume the Polymarket price IS the probability.
-    // To ensure profit, we can slightly "worsen" the odds for the user in the RNG,
-    // OR we just take a fee on the payout. Let's take a fee on payout.
+    // 4. DETERMINE WINNER (Using Real Polymarket Odds)
+    // prediction: true (Left Button/Outcome 1) or false (Right Button/Outcome 2)
+    // odds: The price of the outcome selected.
     
-    const probability = parseFloat(odds); 
-    const isWin = Math.random() < probability; // Simulation based on real world odds
+    // Simulation:
+    const randomValue = Math.random();
+    const isWin = randomValue < parseFloat(odds);
 
     let payout = 0;
-    
+    let newBalance = await redis.get(`balance:${userAddress}`); // Refresh balance
+
     if (isWin) {
-      // 4. CALCULATE PAYOUT
-      // Standard Payout = Bet / Probability. (e.g. 1 / 0.50 = 2x).
-      // Leveraged Profit = (Standard Profit) * Leverage.
+      // WINNER LOGIC:
+      // Payout = Stake / Probability. 
+      // (e.g. 1 SOL on 50% odds = 2 SOL returned).
+      const rawPayout = parseFloat(amount) / parseFloat(odds);
       
-      const standardPayout = amount / probability;
-      const rawProfit = standardPayout - amount;
-      
-      // Apply Leverage to the PROFIT portion only (Safer for Vault)
-      const leveragedProfit = rawProfit * leverage;
-      
-      // Apply House Fee (e.g. 5% of profit)
-      const houseFee = leveragedProfit * 0.05;
-      const finalProfit = leveragedProfit - houseFee;
+      // House Fee (2%) - We take a small cut from the winnings
+      const fee = rawPayout * 0.02;
+      payout = rawPayout - fee;
 
-      payout = amount + finalProfit;
-
-      // Update Ledger
-      await redis.incrbyfloat(`balance:${userAddress}`, payout);
-    }
+      // Credit Winnings
+      newBalance = await redis.incrbyfloat(`balance:${userAddress}`, payout);
+    } 
+    // IF LOSS: We do nothing. The money was already deducted in Step 3 (Burned).
 
     return res.status(200).json({ 
       success: true, 
       isWin: isWin, 
       payout: payout,
-      oddsUsed: probability 
+      newBalance: parseFloat(newBalance)
     });
 
   } catch (error) {
