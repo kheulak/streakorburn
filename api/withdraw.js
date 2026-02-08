@@ -10,35 +10,23 @@ export default async function handler(req, res) {
   try {
     const { userAddress, amount, destinationAddress } = req.body;
     
-    if (!destinationAddress) {
-        return res.status(400).json({ error: "Destination address required" });
-    }
+    if (!destinationAddress) return res.status(400).json({ error: "Destination required" });
 
     const redis = new Redis({
       url: process.env.KV_REST_API_URL,
       token: process.env.KV_REST_API_TOKEN,
     });
 
-    // 1. Retrieve User's Private Key
+    // 1. Get Keys
     const secretKeyStr = await redis.get(`private_key:${userAddress}`);
-    if (!secretKeyStr) {
-        return res.status(403).json({ error: 'Account not found.' });
-    }
+    if (!secretKeyStr) return res.status(403).json({ error: 'Account not found.' });
 
     const connection = new Connection(process.env.NEXT_PUBLIC_RPC_URL);
     const userKeypair = Keypair.fromSecretKey(bs58.decode(secretKeyStr));
     const destPubkey = new PublicKey(destinationAddress);
 
-    // 2. Check Balance
-    const balanceLamports = await connection.getBalance(userKeypair.publicKey);
+    // 2. Execute Transfer
     const withdrawLamports = parseFloat(amount) * LAMPORTS_PER_SOL;
-
-    // Ensure enough for gas
-    if (balanceLamports < (withdrawLamports + 5000)) {
-        return res.status(403).json({ error: 'Insufficient funds (maintain 0.001 SOL for gas)' });
-    }
-
-    // 3. EXECUTE WITHDRAWAL: Generated Wallet -> External Wallet
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: userKeypair.publicKey,
@@ -47,11 +35,7 @@ export default async function handler(req, res) {
       })
     );
 
-    const signature = await sendAndConfirmTransaction(
-      connection,
-      transaction,
-      [userKeypair]
-    );
+    const signature = await sendAndConfirmTransaction(connection, transaction, [userKeypair]);
 
     return res.status(200).json({ status: 'success', signature });
 
