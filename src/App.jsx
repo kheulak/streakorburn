@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, Lock, Menu, X, Trophy, ChevronRight, Wallet2, Zap, Twitter, Coins, 
   ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
-  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle, Maximize
+  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle, AlertTriangle
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -78,17 +78,23 @@ function GameContent() {
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
-  // --- 1. INITIAL DATA LOAD (PERSISTENCE) ---
+  // --- 1. HANDLE DISCONNECT & CLEANUP (CRITICAL) ---
   useEffect(() => {
-    if (walletAddress) {
-        refreshUserData();
-    } else {
-        // Clear sensitive data on disconnect
+    if (!walletAddress) {
+        // RESET ALL STATES ON DISCONNECT
+        setGameState('landing');
         setVaultBalance(0);
         setStreakHistory([]);
+        setActivePicks([]);
+        setStreakStake(0);
+        
+        // CLOSE ALL MODALS
         setShowDashboard(false);
         setShowEntryModal(false);
         setShowStakeSelect(false);
+        setIsMenuOpen(false);
+    } else {
+        refreshUserData();
     }
   }, [walletAddress]);
 
@@ -150,7 +156,7 @@ function GameContent() {
 
   const handleEnterArena = () => {
     if (!walletAddress) {
-      // Force connection flow
+      // Force UI to show wallet connect
       return; 
     }
     
@@ -191,16 +197,16 @@ function GameContent() {
 
   // --- GAMEPLAY ACTION (Building the Slip) ---
   const handleAction = (selectionIndex) => {
+      // selectionIndex: 0 (Left/Yes), 1 (No/Right)
+
       // GUARD: Logged Out
       if (!walletAddress) {
-          setShowEntryModal(true);
-          return;
+          return; // Button is hidden/disabled in UI, but safety check here
       }
 
       // GUARD: Zero Stake or No Active Streak
-      if (streakStake <= 0) {
-          setShowStakeSelect(true);
-          return;
+      if (streakStake <= 0 || gameState !== 'playing') {
+          return; // Logic guard
       }
 
       // GUARD: Event Started
@@ -328,14 +334,6 @@ function GameContent() {
       setWithdrawAmount(vaultBalance.toString());
   };
 
-  const handleReset = () => {
-    setGameState('landing');
-    setCurrentIdx(0);
-    setActivePicks([]);
-    setShowEntryModal(false);
-    setIsMenuOpen(false);
-  };
-
   if (isMarketsLoading) {
       return (
         <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white font-black animate-pulse">
@@ -344,6 +342,10 @@ function GameContent() {
         </div>
       );
   }
+
+  // Derived state for Sidebar interactivity
+  // Interactive ONLY if we are in 'playing' state (Active Streak) AND user is logged in
+  const isSidebarInteractive = walletAddress && gameState === 'playing' && streakStake > 0;
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
@@ -397,19 +399,20 @@ function GameContent() {
             </div>
           )}
           
-          {walletAddress ? (
-            <button 
-              onClick={() => setShowDashboard(true)}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-black text-[9px] uppercase tracking-widest hover:brightness-110 transition-all duration-300 flex items-center gap-2 border border-white/20"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>{walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}</span>
-            </button>
-          ) : (
-             <div className="scale-75 origin-right">
-                <WalletMultiButton />
-             </div>
-          )}
+          <div className="scale-90 origin-right">
+             <WalletMultiButton style={{
+                 backgroundColor: '#2563eb',
+                 height: '40px',
+                 borderRadius: '0.75rem',
+                 fontFamily: 'inherit',
+                 fontWeight: '900',
+                 fontSize: '10px',
+                 textTransform: 'uppercase',
+                 letterSpacing: '0.1em'
+             }}>
+                 {walletAddress ? "Connected" : "Connect Wallet"}
+             </WalletMultiButton>
+          </div>
 
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -460,18 +463,18 @@ function GameContent() {
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-6 md:p-10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
               <div className="flex justify-between items-center mb-6 flex-none">
                 <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
                 <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
               </div>
               
-              <div className="overflow-y-auto pr-2 custom-scrollbar flex-1 space-y-6">
+              <div className="overflow-y-auto pr-2 flex-1 space-y-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {/* WALLET INFO */}
                   <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                     <div className="flex justify-between mb-2">
-                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Account</span>
-                        <span className="text-[10px] font-bold text-red-500">REAL MONEY</span>
+                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Status</span>
+                        <span className="text-[10px] font-bold text-green-400">REAL MONEY VAULT</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Wallet2 className="w-4 h-4 text-cyan-400" />
@@ -526,27 +529,25 @@ function GameContent() {
                       <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block mb-4">Vault Operations</span>
                       <div className="flex flex-col gap-4">
                         <div className="flex gap-2">
-                          <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
+                          <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-[#0a0a10] border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
                           <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
                               {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                              {isLoading ? 'Processing...' : 'Deposit'}
+                              {isLoading ? '...' : 'Deposit'}
                           </button>
                         </div>
                         <div className="flex gap-2">
                           <div className="relative flex-1">
-                              <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors h-full" />
+                              <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors h-full" />
                               <button onClick={handleMaxWithdraw} className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] bg-white/10 px-2 py-1 rounded text-white hover:bg-white/20">MAX</button>
                           </div>
                           <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
                               {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
-                              {isLoading ? 'Processing...' : 'Withdraw'}
+                              {isLoading ? '...' : 'Withdraw'}
                           </button>
                         </div>
                         <span className="text-[9px] text-neutral-500 text-right">Available to Withdraw: {vaultBalance.toFixed(3)} SOL</span>
                       </div>
                   </div>
-                  
-                  <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
             </motion.div>
           </div>
@@ -578,9 +579,9 @@ function GameContent() {
                     placeholder="Custom SOL (1-50)" 
                     value={customStake} 
                     onChange={(e) => setCustomStake(e.target.value)} 
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white font-bold"
+                    className="flex-1 bg-[#0a0a10] border border-white/10 rounded-xl px-4 text-white font-bold focus:border-blue-500 focus:outline-none h-12"
                   />
-                  <button onClick={() => handleStartStreak(customStake)} className="px-6 rounded-xl bg-white text-black font-black text-[10px] uppercase">Start</button>
+                  <button onClick={() => handleStartStreak(customStake)} className="px-6 rounded-xl bg-white text-black font-black text-[10px] uppercase hover:bg-gray-200">Start</button>
               </div>
               
               <button onClick={() => setShowStakeSelect(false)} className="text-[10px] font-black text-red-500 uppercase hover:text-white transition-colors">Cancel</button>
@@ -799,12 +800,15 @@ function GameContent() {
             {marketDeck.map((m) => (
               <div 
                 key={m.id} 
-                className={`group relative p-4 rounded-2xl bg-white/[0.03] border overflow-hidden backdrop-blur-md hover:border-cyan-500/30 transition-all cursor-pointer ${currentIdx === m.id ? 'border-cyan-500/50 bg-white/[0.05]' : 'border-white/[0.08]'}`} 
+                className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
+                    ${isSidebarInteractive 
+                        ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
+                        : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
+                    ${currentIdx === m.id && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
+                `} 
                 onClick={() => {
-                  if(!isEventStarted) {
-                      if (!walletAddress) { setShowEntryModal(true); return; }
+                  if(isSidebarInteractive) {
                       setCurrentIdx(m.id);
-                      setGameState('playing'); 
                   }
                 }}
               >
