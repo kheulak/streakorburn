@@ -68,7 +68,11 @@ function GameContent() {
   // UI State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
+  
+  // SEPARATED POPUPS
+  const [showDashboard, setShowDashboard] = useState(false); // VAULT (Funds Only)
+  const [showMyBets, setShowMyBets] = useState(false);     // MY BETS (Streaks Only)
+  
   const [showLiveFeed, setShowLiveFeed] = useState(false);
   const [showStakeSelect, setShowStakeSelect] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -78,7 +82,7 @@ function GameContent() {
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
-  // --- 1. HANDLE DISCONNECT & CLEANUP (CRITICAL) ---
+  // --- 1. HANDLE DISCONNECT & CLEANUP ---
   useEffect(() => {
     if (!walletAddress) {
         // RESET ALL STATES ON DISCONNECT
@@ -90,6 +94,7 @@ function GameContent() {
         
         // CLOSE ALL MODALS
         setShowDashboard(false);
+        setShowMyBets(false);
         setShowEntryModal(false);
         setShowStakeSelect(false);
         setIsMenuOpen(false);
@@ -163,8 +168,8 @@ function GameContent() {
     setShowEntryModal(false);
     
     if (isEventStarted) {
-        alert("Event has started! Betting is closed. Viewing Dashboard.");
-        setShowDashboard(true);
+        alert("Event has started! Betting is closed. Viewing My Bets.");
+        setShowMyBets(true);
     } else {
         // Go straight to Stake Select
         setShowStakeSelect(true); 
@@ -183,7 +188,7 @@ function GameContent() {
       if (stakeVal > vaultBalance) {
           alert(`Insufficient SOL Balance in Vault. Please Deposit.`);
           setShowStakeSelect(false);
-          setShowDashboard(true); 
+          setShowDashboard(true); // Show Vault for deposit
           return;
       }
       
@@ -201,7 +206,7 @@ function GameContent() {
 
       // GUARD: Logged Out
       if (!walletAddress) {
-          return; // Button is hidden/disabled in UI, but safety check here
+          return; 
       }
 
       // GUARD: Zero Stake or No Active Streak
@@ -374,7 +379,7 @@ function GameContent() {
             <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <Coins className="w-3.5 h-3.5" /> BUY $SOB
             </button>
-            <button onClick={() => {if (walletAddress) setShowDashboard(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
+            <button onClick={() => {if (walletAddress) setShowMyBets(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <History className="w-3.5 h-3.5" /> MY BETS
             </button>
             <button onClick={() => {if (walletAddress) setShowStakeSelect(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
@@ -399,20 +404,28 @@ function GameContent() {
             </div>
           )}
           
-          <div className="scale-90 origin-right">
-             <WalletMultiButton style={{
-                 backgroundColor: '#2563eb',
-                 height: '40px',
-                 borderRadius: '0.75rem',
-                 fontFamily: 'inherit',
-                 fontWeight: '900',
-                 fontSize: '10px',
-                 textTransform: 'uppercase',
-                 letterSpacing: '0.1em'
-             }}>
-                 {walletAddress ? "Connected" : "Connect Wallet"}
-             </WalletMultiButton>
-          </div>
+          {walletAddress ? (
+            <button 
+              onClick={() => setShowDashboard(true)}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-black text-[9px] uppercase tracking-widest hover:brightness-110 transition-all duration-300 flex items-center gap-2 border border-white/20"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>{walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}</span>
+            </button>
+          ) : (
+             <div className="scale-90 origin-right">
+                <WalletMultiButton style={{
+                    backgroundColor: '#2563eb',
+                    height: '40px',
+                    borderRadius: '0.75rem',
+                    fontFamily: 'inherit',
+                    fontWeight: '900',
+                    fontSize: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em'
+                }} />
+             </div>
+          )}
 
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -434,7 +447,7 @@ function GameContent() {
             <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
             </button>
-            <button onClick={() => {if(walletAddress) setShowDashboard(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+            <button onClick={() => {if(walletAddress) setShowMyBets(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <History className="w-4 h-4 text-cyan-400" /> MY BETS
             </button>
             <button onClick={() => {if(walletAddress) setShowStakeSelect(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
@@ -447,7 +460,7 @@ function GameContent() {
             {walletAddress && (
               <>
                 <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
-                  <User className="w-4 h-4" /> DASHBOARD
+                  <User className="w-4 h-4" /> VAULT
                 </button>
                 <button onClick={() => disconnect()} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
                   <LogOut className="w-4 h-4" /> DISCONNECT
@@ -458,7 +471,7 @@ function GameContent() {
         )}
       </AnimatePresence>
 
-      {/* DASHBOARD MODAL */}
+      {/* 1. VAULT MODAL (FUNDS ONLY) */}
       <AnimatePresence>
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
@@ -480,48 +493,6 @@ function GameContent() {
                       <Wallet2 className="w-4 h-4 text-cyan-400" />
                       <span className="text-lg font-black text-white">{walletAddress ? walletAddress.slice(0, 12) + "..." : "Not Connected"}</span>
                     </div>
-                  </div>
-
-                  {/* STREAK HISTORY */}
-                  <div className="space-y-4">
-                      <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-                          <Layers className="w-4 h-4 text-blue-500" />
-                          <span className="text-xs font-black text-white uppercase">Your Streak History</span>
-                      </div>
-                      
-                      {streakHistory.length === 0 && <p className="text-[10px] text-neutral-600 text-center py-4">No streaks found. Start your first 10-streak!</p>}
-
-                      {streakHistory.map((streak) => (
-                          <div key={streak.id} className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                              <div className="flex justify-between items-center mb-3">
-                                  <div className="flex flex-col">
-                                      <span className="text-[9px] font-bold text-neutral-400">{new Date(streak.date).toLocaleDateString()}</span>
-                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">LOCKED</span>
-                                  </div>
-                                  <div className="text-right">
-                                      <span className="text-[9px] font-bold text-white block">STAKE: {streak.stake} SOL</span>
-                                      <span className="text-[8px] font-black text-green-500 uppercase">POTENTIAL: {streak.potentialPayout} SOL</span>
-                                  </div>
-                              </div>
-                              <div className="space-y-1">
-                                  <div className="flex justify-between text-[8px] font-bold text-neutral-500 uppercase bg-black/20 p-2 rounded">
-                                      <span>Status</span>
-                                      <span className={isEventStarted ? 'text-green-400' : 'text-yellow-500'}>
-                                          {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
-                                      </span>
-                                  </div>
-                                  <div className="mt-2 grid grid-cols-2 gap-2">
-                                      {streak.picks.slice(0,4).map((p, i) => (
-                                          <div key={i} className="text-[7px] text-neutral-400 truncate flex justify-between">
-                                              <span>{p.outcome}</span>
-                                              <span className="text-neutral-600">{(p.odds * 100).toFixed(0)}%</span>
-                                          </div>
-                                      ))}
-                                      {streak.picks.length > 4 && <div className="text-[7px] text-neutral-600 italic">... +{streak.picks.length - 4} more</div>}
-                                  </div>
-                              </div>
-                          </div>
-                      ))}
                   </div>
 
                   {/* DEPOSIT / WITHDRAW */}
@@ -548,12 +519,70 @@ function GameContent() {
                         <span className="text-[9px] text-neutral-500 text-right">Available to Withdraw: {vaultBalance.toFixed(3)} SOL</span>
                       </div>
                   </div>
+                  
+                  <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* STAKE SELECTION MODAL */}
+      {/* 2. MY BETS MODAL (STREAKS ONLY) */}
+      <AnimatePresence>
+        {showMyBets && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMyBets(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-6 md:p-10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="flex justify-between items-center mb-6 flex-none">
+                <h3 className="text-2xl font-black italic uppercase text-white">My Bets</h3>
+                <button onClick={() => setShowMyBets(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
+              </div>
+              
+              <div className="overflow-y-auto pr-2 flex-1 space-y-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {/* STREAK HISTORY */}
+                  <div className="space-y-4">
+                      {streakHistory.length === 0 && <p className="text-[10px] text-neutral-600 text-center py-4">No active streaks. Start your first 10-streak!</p>}
+
+                      {streakHistory.map((streak) => (
+                          <div key={streak.id} className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <div className="flex justify-between items-center mb-3">
+                                  <div className="flex flex-col">
+                                      <span className="text-[9px] font-bold text-neutral-400">{new Date(streak.date).toLocaleDateString()}</span>
+                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">REAL STREAK</span>
+                                  </div>
+                                  <div className="text-right">
+                                      <span className="text-[9px] font-bold text-white block">STAKE: {streak.stake} SOL</span>
+                                      <span className="text-[8px] font-black text-green-500 uppercase">POTENTIAL: {streak.potentialPayout} SOL</span>
+                                  </div>
+                              </div>
+                              <div className="space-y-1">
+                                  <div className="flex justify-between text-[8px] font-bold text-neutral-500 uppercase bg-black/20 p-2 rounded">
+                                      <span>Status</span>
+                                      <span className={isEventStarted ? 'text-green-400' : 'text-yellow-500'}>
+                                          {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
+                                      </span>
+                                  </div>
+                                  <div className="mt-2 grid grid-cols-2 gap-2">
+                                      {streak.picks.slice(0,4).map((p, i) => (
+                                          <div key={i} className="text-[7px] text-neutral-400 truncate flex justify-between">
+                                              <span>{p.outcome}</span>
+                                              <span className="text-neutral-600">{(p.odds * 100).toFixed(0)}%</span>
+                                          </div>
+                                      ))}
+                                      {streak.picks.length > 4 && <div className="text-[7px] text-neutral-600 italic">... +{streak.picks.length - 4} more</div>}
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* STAKE SELECTION MODAL */}
+      <AnimatePresence>
         {showStakeSelect && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowStakeSelect(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -588,8 +617,10 @@ function GameContent() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* ENTRY MODAL */}
+      {/* ENTRY MODAL */}
+      <AnimatePresence>
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -608,8 +639,10 @@ function GameContent() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* SUCCESS MODAL (STREAK LOCKED) */}
+      {/* SUCCESS MODAL (STREAK LOCKED) */}
+      <AnimatePresence>
         {gameState === 'streak_submitted' && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="relative bg-[#0a0a10] border border-green-500/50 p-12 rounded-[3rem] w-full max-w-md shadow-2xl text-center">
@@ -619,14 +652,16 @@ function GameContent() {
                     Your 10-Streak is saved. Results pending Super Bowl start.
                 </p>
                 <div className="flex flex-col gap-3">
-                    <button onClick={() => {setGameState('landing'); setShowDashboard(true);}} className="w-full bg-white text-black py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all">View Dashboard</button>
+                    <button onClick={() => {setGameState('landing'); setShowMyBets(true);}} className="w-full bg-white text-black py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all">View My Bets</button>
                     <button onClick={() => {setGameState('landing'); setShowStakeSelect(true);}} className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-white/20 transition-all">Start New Streak</button>
                 </div>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
         
-        {/* LIVE FEED MODAL */}
+      {/* LIVE FEED MODAL */}
+      <AnimatePresence>
         {showLiveFeed && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
