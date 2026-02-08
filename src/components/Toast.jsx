@@ -3,10 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
 
 const ToastItem = ({ id, message, type, onClose }) => {
+  // 🚨 AUTO-CLOSE LOGIC FIXED: 2000ms (2 Seconds)
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose(id);
-    }, 4000); // Auto close after 4s
+    }, 2000); 
+
+    // Cleanup timer to prevent memory leaks
     return () => clearTimeout(timer);
   }, [id, onClose]);
 
@@ -43,6 +46,7 @@ const ToastItem = ({ id, message, type, onClose }) => {
     >
       <div className="flex-shrink-0">{getIcon()}</div>
       <p className="text-xs font-bold text-white flex-1">{message}</p>
+      {/* Manual Close Button */}
       <button onClick={() => onClose(id)} className="text-white/50 hover:text-white transition-colors">
         <X className="w-4 h-4" />
       </button>
