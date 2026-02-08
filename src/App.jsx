@@ -5,36 +5,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Flame, 
-  Lock,
-  Menu,
-  X,
-  Trophy,
-  ChevronRight,
-  Wallet2,
-  Zap,
-  Twitter,
-  Coins,
-  ShieldCheck,
-  TrendingUp,
-  Activity,
-  Mic2,
-  Music,
-  User,
-  LogOut,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  History,
-  ExternalLink,
-  CheckCircle,
-  Clock,
-  Layers,
-  AlertTriangle
+  Flame, Lock, Menu, X, Trophy, ChevronRight, Wallet2, Zap, Twitter, Coins, 
+  ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
+  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 // !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
-const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
+const HOUSE_WALLET_ADDRESS = "REPLACE_WITH_YOUR_WALLET_ADDRESS"; 
 // ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -51,28 +29,10 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
   </svg>
 );
 
-// Fallback Data (Loads if API fails so UI doesn't break)
+// Fallback Data
 const FALLBACK_DECK = [
-  { 
-    id: 0, 
-    question: "Sam Darnold", 
-    category: "SUPER BOWL MVP", 
-    img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", 
-    outcome_yes: "Yes", 
-    price_yes: 0.44, 
-    outcome_no: "No", 
-    price_no: 0.56 
-  },
-  { 
-    id: 1, 
-    question: "Seahawks vs Patriots", 
-    category: "GAME WINNER", 
-    img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", 
-    outcome_yes: "Seahawks", 
-    price_yes: 0.55, 
-    outcome_no: "Patriots", 
-    price_no: 0.45 
-  }
+  { id: 0, question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
+  { id: 1, question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
 ];
 
 function GameContent() {
@@ -96,10 +56,8 @@ function GameContent() {
   const walletAddress = publicKey ? publicKey.toString() : null;
   const walletName = wallet?.adapter?.name || 'Solana Wallet';
   
-  // Mode & Balance State
-  const [isRealMode, setIsRealMode] = useState(false);
+  // Balance State (REAL ONLY)
   const [vaultBalance, setVaultBalance] = useState(0.0);
-  const [simBalance, setSimBalance] = useState(1000.0);
   const [winnings, setWinnings] = useState(0.0);
 
   // Dashboard Inputs
@@ -132,7 +90,6 @@ function GameContent() {
           const data = await res.json();
           if (data.history) setStreakHistory(data.history);
           if (data.realBalance !== undefined) setVaultBalance(data.realBalance);
-          if (data.simBalance !== undefined) setSimBalance(data.simBalance);
       } catch (e) {
           console.error("Failed to load user data", e);
       }
@@ -181,33 +138,36 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- ACTIONS ---
+  // --- CORE ACTIONS ---
 
-  const handleModeSelect = (mode) => {
-    if (!walletAddress) return alert("Please connect your wallet first!");
+  const handleEnterArena = () => {
+    if (!walletAddress) {
+      alert("Please connect your wallet first!");
+      return;
+    }
     
-    setIsRealMode(mode === 'real');
     setShowEntryModal(false);
     
     if (isEventStarted) {
         alert("Event has started! Betting is closed. Viewing Dashboard.");
         setShowDashboard(true);
     } else {
-        setShowStakeSelect(true); // Always force stake selection for new flow
+        // Go straight to Stake Select
+        setShowStakeSelect(true); 
     }
   };
 
   const handleStartStreak = (amount) => {
-      const currentBal = isRealMode ? vaultBalance : simBalance;
-      if (amount > currentBal) {
-          alert(`Insufficient ${isRealMode ? 'Real' : 'Sim'} Balance.`);
-          if (isRealMode) setShowDashboard(true); 
+      if (amount > vaultBalance) {
+          alert(`Insufficient SOL Balance. Please Deposit.`);
+          setShowDashboard(true); 
           return;
       }
       
+      // CRITICAL RESET LOGIC
       setStreakStake(amount);
-      setActivePicks([]);
-      setCurrentIdx(0);
+      setActivePicks([]); // Clear any previous streak state
+      setCurrentIdx(0);   // Reset deck to beginning
       setShowStakeSelect(false);
       setGameState('playing');
   };
@@ -241,13 +201,12 @@ function GameContent() {
   const submitStreak = async (finalPicks) => {
       setIsLoading(true);
       try {
-          // Call our new Streak Manager API
+          // Call our Streak Manager API
           const response = await fetch('/api/streak', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   userAddress: walletAddress,
-                  mode: isRealMode ? 'real' : 'sim',
                   stake: streakStake,
                   picks: finalPicks
               })
@@ -259,7 +218,11 @@ function GameContent() {
           // Update State with new data from server
           setStreakHistory(prev => [data.streak, ...prev]);
           if (data.realBalance !== undefined) setVaultBalance(data.realBalance);
-          if (data.simBalance !== undefined) setSimBalance(data.simBalance);
+
+          // CRITICAL: Reset Local State AFTER submission
+          setActivePicks([]); 
+          setStreakStake(0);
+          setCurrentIdx(0);
 
           setGameState('streak_submitted');
 
@@ -365,8 +328,9 @@ function GameContent() {
           </div>
           
           <div className="hidden lg:flex items-center gap-8">
-            <button onClick={() => {handleModeSelect('sim');}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
-              <Coins className="w-3.5 h-3.5" /> SIMULATOR
+            {/* NEW BUTTON: START NEW STREAK */}
+            <button onClick={() => {setShowStakeSelect(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
+              <PlusCircle className="w-3.5 h-3.5" /> START NEW STREAK
             </button>
             <button onClick={() => setShowLiveFeed(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-red-500 transition-colors">
               <Activity className="w-3.5 h-3.5" /> LIVE FEED
@@ -379,10 +343,10 @@ function GameContent() {
           {walletAddress && (
             <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
               <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
-                {isRealMode ? 'Vault Balance' : 'Sim Balance'}
+                Vault Balance
               </span>
               <span className="text-xs font-black text-white tabular-nums">
-                {isRealMode ? vaultBalance.toFixed(3) : simBalance.toFixed(2)} SOL
+                {vaultBalance.toFixed(3)} SOL
               </span>
             </div>
           )}
@@ -418,8 +382,8 @@ function GameContent() {
               </div>
             )}
             
-            <button onClick={() => {handleModeSelect('sim'); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
-              <Coins className="w-4 h-4 text-cyan-400" /> SIMULATOR
+            <button onClick={() => {setShowStakeSelect(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+              <PlusCircle className="w-4 h-4 text-cyan-400" /> START NEW STREAK
             </button>
             <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
               <Activity className="w-4 h-4 text-red-500" /> LIVE FEED
@@ -454,8 +418,8 @@ function GameContent() {
                   {/* WALLET INFO */}
                   <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                     <div className="flex justify-between mb-2">
-                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Active Mode</span>
-                        <span className={`text-[10px] font-bold ${isRealMode ? 'text-red-500' : 'text-blue-400'}`}>{isRealMode ? 'REAL MONEY' : 'SIMULATION'}</span>
+                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Status</span>
+                        <span className="text-[10px] font-bold text-green-400">REAL MONEY VAULT</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Wallet2 className="w-4 h-4 text-cyan-400" />
@@ -463,7 +427,7 @@ function GameContent() {
                     </div>
                   </div>
 
-                  {/* STREAK HISTORY (NEW) */}
+                  {/* STREAK HISTORY */}
                   <div className="space-y-4">
                       <div className="flex items-center gap-2 border-b border-white/10 pb-2">
                           <Layers className="w-4 h-4 text-blue-500" />
@@ -477,7 +441,7 @@ function GameContent() {
                               <div className="flex justify-between items-center mb-3">
                                   <div className="flex flex-col">
                                       <span className="text-[9px] font-bold text-neutral-400">{new Date(streak.date).toLocaleDateString()}</span>
-                                      <span className={`text-[8px] font-black uppercase tracking-widest ${streak.mode === 'real' ? 'text-red-500' : 'text-blue-400'}`}>{streak.mode} MODE</span>
+                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">REAL STREAK</span>
                                   </div>
                                   <div className="text-right">
                                       <span className="text-[9px] font-bold text-white block">STAKE: {streak.stake} SOL</span>
@@ -506,27 +470,25 @@ function GameContent() {
                   </div>
 
                   {/* DEPOSIT / WITHDRAW */}
-                  {isRealMode && (
-                      <div className="border-t border-white/10 pt-6">
-                          <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block mb-4">Vault Operations</span>
-                          <div className="flex flex-col gap-4">
-                            <div className="flex gap-2">
-                              <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
-                              <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
-                                  {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                                  {isLoading ? 'Processing...' : 'Deposit'}
-                              </button>
-                            </div>
-                            <div className="flex gap-2">
-                              <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
-                              <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
-                                  {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
-                                  {isLoading ? 'Processing...' : 'Withdraw'}
-                              </button>
-                            </div>
-                          </div>
+                  <div className="border-t border-white/10 pt-6">
+                      <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block mb-4">Vault Operations</span>
+                      <div className="flex flex-col gap-4">
+                        <div className="flex gap-2">
+                          <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
+                          <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
+                              {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
+                              {isLoading ? 'Processing...' : 'Deposit'}
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
+                          <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
+                              {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
+                              {isLoading ? 'Processing...' : 'Withdraw'}
+                          </button>
+                        </div>
                       </div>
-                  )}
+                  </div>
                   
                   <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
@@ -542,7 +504,7 @@ function GameContent() {
               <ShieldCheck className="w-12 h-12 text-green-500 mx-auto mb-4" />
               <h3 className="text-3xl font-black italic uppercase text-white mb-2">10-Streak Challenge</h3>
               <p className="text-sm font-bold text-neutral-400 mb-2 max-w-md mx-auto">
-                  Mode: <span className={isRealMode ? "text-red-500" : "text-blue-400"}>{isRealMode ? 'REAL MONEY' : 'SIMULATION'}</span>
+                  Mode: <span className="text-red-500">REAL MONEY</span>
               </p>
               <p className="text-[10px] text-neutral-500 mb-8 uppercase tracking-widest">Select Stake Amount</p>
               
@@ -560,7 +522,7 @@ function GameContent() {
           </div>
         )}
 
-        {/* ENTRY MODAL */}
+        {/* ENTRY MODAL (SIMPLIFIED FOR REAL MONEY) */}
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -570,15 +532,11 @@ function GameContent() {
                 <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
                 <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
+              <div className="grid grid-cols-1 gap-4">
+                <div onClick={handleEnterArena} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
                   <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
-                  <p className="text-xs font-black text-white italic uppercase">Real SOL</p>
+                  <p className="text-xs font-black text-white italic uppercase">Enter Real Money Vault</p>
                 </div>
-                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
-                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
-                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
-                </button>
               </div>
             </motion.div>
           </div>
@@ -793,10 +751,6 @@ function GameContent() {
                         <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
                     </div>
                     <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
-                </div>
-                <div className="mt-2 text-[8px] text-neutral-500 flex justify-between">
-                    <span>{m.outcome_yes}</span>
-                    <span>{m.outcome_no}</span>
                 </div>
               </div>
             ))}
