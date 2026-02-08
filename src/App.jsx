@@ -26,10 +26,12 @@ import {
   ArrowUpCircle,
   History,
   ExternalLink,
-  Target
+  CheckCircle,
+  Clock
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
+// !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
@@ -76,10 +78,10 @@ function GameContent() {
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
   
-  // Streak State
-  const [streakCount, setStreakCount] = useState(0); // 0 to 10
-  const [streakStake, setStreakStake] = useState(0); // Locked amount
-  const [isStreakActive, setIsStreakActive] = useState(false);
+  // Streak State (Local Logic)
+  const [streakStake, setStreakStake] = useState(0);
+  const [activePicks, setActivePicks] = useState([]); // Stores the 10 picks before submission
+  const [confirmedStreak, setConfirmedStreak] = useState(null); // Stores the final submitted streak
   
   // Market Data State
   const [marketDeck, setMarketDeck] = useState(FALLBACK_DECK);
@@ -109,13 +111,12 @@ function GameContent() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
-  const [showStakeSelect, setShowStakeSelect] = useState(false); // NEW: For streak stake
+  const [showStakeSelect, setShowStakeSelect] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Gameplay
-  // Note: betAmount is now controlled by the Stake Selection modal, not the slider
-  
+  // Event Timing (PHASE LOGIC)
   const targetDate = useMemo(() => new Date('2026-02-08T18:30:00-05:00').getTime(), []);
+  const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
   // --- 1. LIVE DATA STREAM (POLLING) ---
@@ -126,20 +127,18 @@ function GameContent() {
         const data = await res.json();
         
         if (data && Array.isArray(data) && data.length > 0) {
-          // Add index for navigation
           const indexedData = data.map((item, index) => ({...item, id: index}));
           setMarketDeck(indexedData);
           setIsMarketsLoading(false);
         }
       } catch (error) {
         console.error("Failed to stream markets", error);
-        // We keep fallback deck if fail so app doesn't crash
         setIsMarketsLoading(false);
       }
     }
     
-    fetchPolymarket(); // Initial load
-    const interval = setInterval(fetchPolymarket, 5000); // Stream every 5 seconds
+    fetchPolymarket(); 
+    const interval = setInterval(fetchPolymarket, 10000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -150,47 +149,27 @@ function GameContent() {
         try {
           const res = await fetch(`/api/balance?userAddress=${walletAddress}`);
           const data = await res.json();
-          if (data.success) {
-            setVaultBalance(data.balance);
-          }
-        } catch (e) {
-          console.error("Failed to fetch balance", e);
-        }
+          if (data.success) setVaultBalance(data.balance);
+        } catch (e) { console.error(e); }
       }
     };
-    
     fetchBalance();
     const interval = setInterval(fetchBalance, 10000); 
     return () => clearInterval(interval);
   }, [walletAddress, isRealMode]);
 
-  // --- PERSISTENCE EFFECTS ---
-  useEffect(() => {
-    if (walletAddress) localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
-  }, [walletAddress, isRealMode]);
-
-  // Demo Mode Persistence
-  useEffect(() => {
-    if (walletAddress && !isRealMode) {
-      const savedSim = localStorage.getItem(`sob_sim_bal_${walletAddress}`);
-      if (savedSim) setDemoBalance(parseFloat(savedSim));
-    }
-  }, [walletAddress, isRealMode]);
-
-  useEffect(() => {
-    if (walletAddress && !isRealMode) {
-      localStorage.setItem(`sob_sim_bal_${walletAddress}`, demoBalance.toString());
-    }
-  }, [demoBalance, walletAddress, isRealMode]);
-
-  // Timer Logic
+  // --- 3. TIMER & PHASE LOGIC ---
   useEffect(() => {
     const timer = setInterval(() => {
-      const distance = targetDate - new Date().getTime();
+      const now = new Date().getTime();
+      const distance = targetDate - now;
+      
       if (distance < 0) {
         setCountdown({ h: 0, m: 0, s: 0 });
+        setIsEventStarted(true); // PHASE 2 TRIGGER
         clearInterval(timer);
       } else {
+        setIsEventStarted(false); // PHASE 1
         setCountdown({
           h: Math.floor(distance / (1000 * 60 * 60)),
           m: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
@@ -201,6 +180,11 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
+  // Persistence
+  useEffect(() => {
+    if (walletAddress) localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
+  }, [walletAddress, isRealMode]);
+
   // --- ACTIONS ---
 
   const handleModeSelect = (mode) => {
@@ -208,12 +192,16 @@ function GameContent() {
       alert("Please connect your wallet first!");
       return;
     }
-    
     if (mode === 'real') {
         setIsRealMode(true);
-        // In Real Mode, we must select stake first
         setShowEntryModal(false);
-        setShowStakeSelect(true); 
+        // If event hasn't started, go to stake select
+        if (!isEventStarted) {
+            setShowStakeSelect(true);
+        } else {
+            alert("Event has started! Betting is closed. Redirecting to Live Dashboard.");
+            setShowDashboard(true);
+        }
     } else {
         setIsRealMode(false);
         setGameState('playing');
@@ -221,7 +209,6 @@ function GameContent() {
     }
   };
 
-  // NEW: Start the 10-Streak
   const handleStartStreak = (amount) => {
       if (isRealMode && amount > vaultBalance) {
           alert("Insufficient Vault Balance. Please Deposit first.");
@@ -229,15 +216,12 @@ function GameContent() {
           setShowDashboard(true);
           return;
       }
-      
       setStreakStake(amount);
-      setStreakCount(0);
-      setIsStreakActive(true);
+      setActivePicks([]); // Clear picks
+      setConfirmedStreak(null); // Clear old streak
+      setCurrentIdx(0);
       setShowStakeSelect(false);
       setGameState('playing');
-      
-      // In a real backend implementation, we would lock the funds here via API.
-      // For now, the 'bet' API deducts per prediction, but visually we show it as a streak.
   };
 
   const handleDeposit = async () => {
@@ -270,11 +254,13 @@ function GameContent() {
 
         setVaultBalance(verifyData.newBalance);
         setDepositAmount('');
-        
-        // After deposit, ask if they want to start a streak
         alert(`Secure Deposit Confirmed! ${amountSOL} SOL added to Vault.`);
-        setShowDashboard(false);
-        setShowStakeSelect(true);
+        
+        // After deposit, prompt for streak if pre-event
+        if (!isEventStarted) {
+            setShowDashboard(false);
+            setShowStakeSelect(true);
+        }
 
     } catch (error) {
         console.error("Deposit Failed:", error);
@@ -303,95 +289,82 @@ function GameContent() {
     } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
   };
 
-  // --- GAME ACTION (STREAK LOGIC) ---
+  // --- SUBMIT STREAK (FINALIZE BET) ---
+  const finalizeStreak = async () => {
+      try {
+          setIsLoading(true);
+          // Use withdrawal endpoint to deduct the stake (Lock funds)
+          // We treat the "Streak" as a purchase of a ticket.
+          const response = await fetch('/api/withdraw', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userAddress: walletAddress, 
+                amount: parseFloat(streakStake) 
+            })
+          });
+
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error);
+
+          // If successful, update UI to show "Pending Streak"
+          setVaultBalance(prev => prev - parseFloat(streakStake));
+          setConfirmedStreak(activePicks); // Save the picks to dashboard state
+          setGameState('streak_submitted'); // Show success screen
+          
+      } catch (error) {
+          alert("Failed to lock streak: " + error.message);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  // --- GAME ACTION (PHASE 1 LOGIC) ---
   const handleAction = async (selectionIndex) => {
-    // selectionIndex: 0 (Left/Yes Button), 1 (Right/No Button)
-    
+    // 1. Check Phase
+    if (isEventStarted) {
+        alert("Event has started! Betting is closed.");
+        return;
+    }
+
     if (!marketDeck || marketDeck.length === 0) return;
     const currentCard = marketDeck[currentIdx];
     
-    // Get live data from card
-    const odds = selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no;
-    const outcomeName = selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no;
+    // Store Pick
+    const pick = {
+        question: currentCard.question,
+        outcome: selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no,
+        odds: selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no,
+        marketId: currentCard.id
+    };
 
-    // DEMO MODE LOGIC
+    const newPicks = [...activePicks, pick];
+    setActivePicks(newPicks);
+
+    // DEMO MODE
     if (!isRealMode) {
-        const isWin = Math.random() < odds; // Simulation using Real Odds
-        
-        if (isWin) {
-            setStreakCount(prev => prev + 1);
-            // Move to next card
-            if (streakCount >= 9) { // 10th correct answer
-                setGameState('winner');
-            } else {
-                setCurrentIdx(prev => (prev + 1) % marketDeck.length);
-            }
+        if (currentIdx === 9) { // 10th pick
+            setGameState('streak_submitted');
         } else {
-            setStreakCount(0);
-            setGameState('burned');
+            setCurrentIdx(prev => (prev + 1) % marketDeck.length);
         }
         return;
     }
 
-    // REAL MODE LOGIC
-    // 1. Check if user has an active streak setup
-    if (!isStreakActive) {
-        setShowStakeSelect(true);
-        return;
-    }
-
-    try {
-        setIsLoading(true);
-        
-        // In this "Streak" model, we are essentially betting the stake repeatedly or locking it.
-        // For security with the existing backend, we will verify the bet against the database balance.
-        
-        const response = await fetch('/api/bet', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userAddress: walletAddress,
-                amount: streakStake, // User is betting their streak stake amount
-                odds: odds,
-                prediction: outcomeName
-            })
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-
-        // Update Balance from Server (Server handles deductions/winnings)
-        setVaultBalance(data.newBalance);
-
-        if (data.isWin) {
-            setStreakCount(prev => prev + 1);
-            
-            if (streakCount >= 9) { // Won 10 in a row
-                setGameState('winner');
-                setWinnings(prev => prev + data.payout);
-                setIsStreakActive(false); // Streak complete
-            } else {
-                // Move to next card
-                setCurrentIdx(prev => (prev + 1) % marketDeck.length);
-            }
-        } else {
-            // Lost
-            setIsStreakActive(false);
-            setStreakCount(0);
-            setGameState('burned');
-        }
-    } catch (error) { 
-        alert("Bet Error: " + error.message); 
-    } finally { 
-        setIsLoading(false); 
+    // REAL MODE
+    // Move to next card or finalize
+    if (newPicks.length === 10) {
+        // We have 10 picks. Now we lock the funds.
+        await finalizeStreak();
+    } else {
+        setCurrentIdx(prev => (prev + 1) % marketDeck.length);
     }
   };
 
   const handleReset = () => {
     setGameState('landing');
     setCurrentIdx(0);
-    setStreakCount(0);
-    setIsStreakActive(false);
+    setActivePicks([]);
     setShowEntryModal(false);
     setIsMenuOpen(false);
   };
@@ -474,57 +447,90 @@ function GameContent() {
         </div>
       </nav>
 
-      {/* DASHBOARD MODAL (DEPOSIT/WITHDRAW) */}
+      {/* DASHBOARD MODAL */}
       <AnimatePresence>
         {showDashboard && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
-              <div className="flex justify-between items-center mb-8">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="flex justify-between items-center mb-6 flex-none">
                 <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
                 <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
               </div>
-              <div className="flex flex-col gap-6">
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletName}</span>
-                  <div className="flex items-center gap-2">
-                    <Wallet2 className="w-4 h-4 text-cyan-400" />
-                    <span className="text-lg font-black text-white">{walletAddress}</span>
+              
+              <div className="overflow-y-auto pr-2 custom-scrollbar flex-1 space-y-6">
+                  {/* WALLET INFO */}
+                  <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletName}</span>
+                    <div className="flex items-center gap-2">
+                      <Wallet2 className="w-4 h-4 text-cyan-400" />
+                      <span className="text-lg font-black text-white">{walletAddress}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 rounded-2xl bg-black border border-white/5">
-                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
-                    <span className="text-2xl font-black text-white">{vaultBalance.toFixed(3)} SOL</span>
+
+                  {/* ACTIVE STREAK SECTION (NEW) */}
+                  {confirmedStreak && (
+                      <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-900/20 to-black border border-blue-500/30">
+                          <div className="flex justify-between items-center mb-4">
+                              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Activity className="w-3 h-3 animate-pulse" /> ACTIVE 10-STREAK
+                              </span>
+                              <span className="text-[9px] font-bold text-white bg-blue-600 px-2 py-1 rounded">STAKE: {streakStake} SOL</span>
+                          </div>
+                          <div className="space-y-2">
+                              {confirmedStreak.map((pick, i) => (
+                                  <div key={i} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
+                                      <div className="flex flex-col">
+                                          <span className="text-[9px] text-neutral-400 uppercase">{pick.question}</span>
+                                          <span className="text-xs font-bold text-white">{pick.outcome}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                          {isEventStarted ? (
+                                              <span className="text-[8px] font-black text-neutral-500 uppercase">LIVE</span>
+                                          ) : (
+                                              <span className="text-[8px] font-black text-yellow-500 uppercase flex items-center gap-1"><Clock className="w-3 h-3" /> PENDING</span>
+                                          )}
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-6 rounded-2xl bg-black border border-white/5">
+                      <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
+                      <span className="text-2xl font-black text-white">{vaultBalance.toFixed(3)} SOL</span>
+                    </div>
+                    <div className="p-6 rounded-2xl bg-black border border-white/5">
+                      <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Total Winnings</span>
+                      <span className="text-2xl font-black text-green-400">{winnings.toFixed(3)} SOL</span>
+                    </div>
                   </div>
-                  <div className="p-6 rounded-2xl bg-black border border-white/5">
-                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Total Winnings</span>
-                    <span className="text-2xl font-black text-green-400">{winnings.toFixed(3)} SOL</span>
+
+                  <div className="flex flex-col gap-4">
+                    <div className="flex gap-2">
+                      <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
+                      <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
+                          {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
+                          {isLoading ? 'Processing...' : 'Deposit'}
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
+                      <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
+                          {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
+                          {isLoading ? 'Processing...' : 'Withdraw'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-col gap-4">
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
-                    <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
-                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                        {isLoading ? 'Processing...' : 'Deposit'}
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
-                    <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
-                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
-                        {isLoading ? 'Processing...' : 'Withdraw'}
-                    </button>
-                  </div>
-                </div>
-                <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
+                  <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
               </div>
             </motion.div>
           </div>
         )}
 
-        {/* STAKE SELECTION MODAL (NEW) */}
+        {/* STAKE SELECTION MODAL */}
         {showStakeSelect && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowStakeSelect(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -683,13 +689,13 @@ function GameContent() {
                             <Flame className="w-5 h-5 text-red-500" />
                           </div>
                           <div>
-                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Streak</span>
-                            <span className="text-2xl font-black text-white italic tabular-nums">{streakCount}/10</span>
+                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Progress</span>
+                            <span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span>
                           </div>
                         </div>
-                        {isStreakActive && (
+                        {isRealMode && (
                             <div className="text-right">
-                                <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Locked Stake</span>
+                                <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span>
                                 <span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span>
                             </div>
                         )}
@@ -736,23 +742,18 @@ function GameContent() {
               </motion.div>
             )}
 
-            {gameState === 'burned' && (
-              <motion.div key="burned" initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center p-12 bg-black border border-red-500/50 rounded-[3rem] max-w-md shadow-2xl">
-                <Flame className="w-16 h-16 text-red-500 mx-auto mb-6" />
-                <h2 className="text-5xl font-black italic uppercase mb-2 text-white">BURNED.</h2>
-                <p className="text-neutral-500 text-[9px] font-black uppercase mb-8 tracking-widest italic">Streak Broken. {streakStake} SOL Burned.</p>
-                <button onClick={() => {setGameState('playing'); setStreakCount(0); setShowStakeSelect(true);}} className="w-full bg-white text-black py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">Start New Streak</button>
+            {/* NEW STATE: STREAK SUBMITTED / PENDING */}
+            {gameState === 'streak_submitted' && (
+              <motion.div key="submitted" initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center p-12 bg-black border border-green-500/50 rounded-[3rem] max-w-md shadow-2xl">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-6" />
+                <h2 className="text-5xl font-black italic uppercase mb-2 text-white">LOCKED.</h2>
+                <p className="text-neutral-500 text-[10px] font-black uppercase mb-8 tracking-widest leading-relaxed">
+                    Streak Saved.<br/>Results pending Super Bowl Start.<br/>Check Dashboard for status.
+                </p>
+                <button onClick={() => {setShowDashboard(true); setGameState('landing');}} className="w-full bg-white text-black py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all">View Dashboard</button>
               </motion.div>
             )}
 
-            {gameState === 'winner' && (
-              <motion.div key="winner" className="text-center p-12 bg-[#0c0c14] border border-cyan-500/50 rounded-[3rem] max-w-md shadow-2xl">
-                <Trophy className="w-16 h-16 text-cyan-400 mx-auto mb-6" />
-                <h2 className="text-5xl font-black italic uppercase mb-2 text-white">CHAMPION.</h2>
-                <p className="text-neutral-500 text-[9px] font-black uppercase mb-8 tracking-widest italic">10/10 Streak! Payout: {(streakStake * 3).toFixed(2)} SOL</p>
-                <button onClick={handleReset} className="w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-white transition-all">Claim Winnings</button>
-              </motion.div>
-            )}
           </AnimatePresence>
         </section>
         
