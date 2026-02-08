@@ -59,7 +59,7 @@ export default async function handler(req, res) {
         const p2 = Number(prices[1]);
 
         // 2. DATA SANITY CHECK: Filter out 0% or 100% markets (Invalid/Resolved/Broken)
-        // We only want ACTIVE betting markets.
+        // We only want ACTIVE betting markets before the event starts.
         if (p1 <= 0 || p1 >= 1 || p2 <= 0 || p2 >= 1) return false;
 
         // 3. Status Check
@@ -103,6 +103,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Polymarket Fetch Error:", error);
+    // Return empty array on error so frontend doesn't crash, just shows loading or empty
     return res.status(500).json({ error: "Failed to fetch live odds" });
   }
 }
