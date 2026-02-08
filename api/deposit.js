@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     // 1. Connect to Solana
     const connection = new Connection(process.env.NEXT_PUBLIC_RPC_URL);
 
-    // 2. Check Real On-Chain Balance of the Generated Wallet
+    // 2. Check Real On-Chain Balance
     const balanceLamports = await connection.getBalance(new PublicKey(userAddress));
     const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
 
