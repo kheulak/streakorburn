@@ -27,44 +27,39 @@ export default async function handler(req, res) {
         realBalance: parseFloat(realBalance)
       });
     } catch (error) {
-      console.error("Fetch Error:", error);
-      return res.status(500).json({ error: error.message });
+      // console.error("Fetch Error:", error); 
+      // Don't fail completely if RPC is slow, just return 0 balance
+      return res.status(200).json({ history: [], realBalance: 0 });
     }
   }
 
-  // --- POST: Start Streak (Transfer Funds to House) ---
+  // --- POST: Start Streak (Transfer Funds) ---
   if (req.method === 'POST') {
     const { userAddress, stake, picks } = req.body;
 
-    // 1. UPDATE LIMITS: 0.05 SOL to 500 SOL
+    // VALIDATE LIMITS (0.05 to 500)
     if (!stake || parseFloat(stake) < 0.05 || parseFloat(stake) > 500) {
         return res.status(400).json({ error: 'Invalid Stake. Must be 0.05 - 500 SOL.' });
     }
-    if (!picks || picks.length !== 10) {
-        return res.status(400).json({ error: 'Invalid Picks. Must be exactly 10.' });
-    }
 
     try {
-      // 2. Retrieve User's Private Key
+      // 1. Get Private Key
       const secretKeyStr = await redis.get(`private_key:${userAddress}`);
-      if (!secretKeyStr) {
-          return res.status(403).json({ error: 'Account not found. Please re-login.' });
-      }
+      if (!secretKeyStr) return res.status(403).json({ error: 'Account not found.' });
 
       const connection = new Connection(process.env.NEXT_PUBLIC_RPC_URL);
       const userKeypair = Keypair.fromSecretKey(bs58.decode(secretKeyStr));
-      const housePubkey = new PublicKey("9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"); // House/Vault Address
+      const housePubkey = new PublicKey("9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt");
 
-      // 3. Check On-Chain Balance before attempting transfer
+      // 2. Check Balance & Gas
       const balanceLamports = await connection.getBalance(userKeypair.publicKey);
       const stakeLamports = parseFloat(stake) * LAMPORTS_PER_SOL;
       
-      // Leave a tiny bit for gas (0.001 SOL)
       if (balanceLamports < (stakeLamports + 5000)) {
-          return res.status(403).json({ error: 'Insufficient SOL Balance in Generated Wallet' });
+          return res.status(403).json({ error: 'Insufficient SOL (Need gas)' });
       }
 
-      // 4. EXECUTE TRANSFER: User Wallet -> House Wallet (Major Vault)
+      // 3. Transfer: User -> House
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: userKeypair.publicKey,
@@ -73,44 +68,34 @@ export default async function handler(req, res) {
         })
       );
 
-      const signature = await sendAndConfirmTransaction(
-        connection,
-        transaction,
-        [userKeypair]
-      );
+      const signature = await sendAndConfirmTransaction(connection, transaction, [userKeypair]);
 
-      // 5. Create Streak Object (Only after successful transfer)
+      // 4. Save Streak
       const newStreak = {
         id: `STREAK-${Date.now()}`,
         date: new Date().toISOString(),
         mode: 'real',
         stake: parseFloat(stake),
-        potentialPayout: parseFloat(stake) * 3, // 3x Multiplier
+        potentialPayout: parseFloat(stake) * 3,
         status: 'PENDING',
         progress: '10/10',
         picks: picks,
-        txSignature: signature
+        tx: signature
       };
 
-      // 6. Save to History
       let history = await redis.get(`streaks:${userAddress}`) || [];
       history.unshift(newStreak);
       await redis.set(`streaks:${userAddress}`, history);
 
-      // 7. Return new balance
-      const newBalanceLamports = await connection.getBalance(userKeypair.publicKey);
-
       return res.status(200).json({ 
         success: true, 
         streak: newStreak,
-        realBalance: newBalanceLamports / LAMPORTS_PER_SOL
+        realBalance: (balanceLamports - stakeLamports) / LAMPORTS_PER_SOL 
       });
 
     } catch (error) {
-      console.error("Streak Creation Error:", error);
+      console.error(error);
       return res.status(500).json({ error: "Transaction Failed: " + error.message });
     }
   }
-
-  return res.status(405).json({ error: 'Method not allowed' });
 }
