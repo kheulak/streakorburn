@@ -3,15 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
 
 const ToastItem = ({ id, message, type, onClose }) => {
-  // 🚨 AUTO-CLOSE LOGIC FIXED: 2000ms (2 Seconds)
   useEffect(() => {
+    // Start the 2-second timer
     const timer = setTimeout(() => {
       onClose(id);
     }, 2000); 
 
-    // Cleanup timer to prevent memory leaks
+    // Cleanup timer on unmount
     return () => clearTimeout(timer);
-  }, [id, onClose]);
+    
+    // 🚨 FIX: We intentionally do NOT include 'onClose' in the dependency array.
+    // Since the main App re-renders every second (countdown), including 'onClose'
+    // would reset this timer constantly, preventing it from ever finishing.
+  }, [id]); 
 
   const variants = {
     initial: { opacity: 0, y: 20, scale: 0.9 },
