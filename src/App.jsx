@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, Lock, Menu, X, Trophy, ChevronRight, Wallet2, Zap, Twitter, Coins, 
   ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
-  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Layers, PlusCircle, Copy, Key
+  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Layers, PlusCircle, Copy, Key, Eye, EyeOff, LogIn
 } from 'lucide-react';
+import { ToastContainer } from './components/Toast';
 
 // --- CONFIGURATION ---
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
@@ -35,6 +36,9 @@ export default function App() {
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
   
+  // TOAST STATE
+  const [notifications, setNotifications] = useState([]);
+
   // STREAK LOGIC STATE
   const [activePicks, setActivePicks] = useState([]); 
   const [streakStake, setStreakStake] = useState(0); 
@@ -47,7 +51,13 @@ export default function App() {
   
   // USER ACCOUNT STATE
   const [userAddress, setUserAddress] = useState(null);
-  const [userSecret, setUserSecret] = useState(null); 
+  const [userSecret, setUserSecret] = useState(null); // Temp for display
+  
+  // AUTH FORM STATE
+  const [authStep, setAuthStep] = useState('selection'); // 'selection' | 'login' | 'register_keys' | 'register_creds'
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   
   // Balance State
   const [vaultBalance, setVaultBalance] = useState(0.0);
@@ -59,7 +69,6 @@ export default function App() {
   // UI State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(false); 
-  const [showKeyModal, setShowKeyModal] = useState(false); 
   const [keysConfirmed, setKeysConfirmed] = useState(false); 
   const [showDashboard, setShowDashboard] = useState(false); // VAULT
   const [showMyBets, setShowMyBets] = useState(false);     // MY BETS
@@ -73,12 +82,23 @@ export default function App() {
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
+  // --- NOTIFICATION SYSTEM ---
+  const addToast = (message, type = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   // --- 1. INITIAL LOAD ---
   useEffect(() => {
     const storedPub = localStorage.getItem('sob_user_pub');
     if (storedPub) {
       setUserAddress(storedPub);
       refreshUserData(storedPub);
+      addToast('Welcome back!', 'success');
     }
   }, []);
 
@@ -96,7 +116,7 @@ export default function App() {
       }
   };
 
-  // --- 2. LIVE DATA STREAM (FIXED) ---
+  // --- 2. LIVE DATA STREAM ---
   useEffect(() => {
     let isMounted = true;
     
@@ -106,7 +126,6 @@ export default function App() {
         const data = await res.json();
         
         if (isMounted && data && Array.isArray(data) && data.length > 0) {
-          // Use ID from backend as unique key and assign visual index
           const indexedData = data.map((item, index) => ({...item, visualIndex: index}));
           setMarketDeck(indexedData);
         }
@@ -147,9 +166,9 @@ export default function App() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- ACCOUNT ACTIONS ---
-  
-  const handleCreateAccount = async () => {
+  // --- AUTH ACTIONS ---
+
+  const handleStartCreateAccount = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/create-account', { method: 'POST' });
@@ -157,20 +176,66 @@ export default function App() {
       if(data.success) {
         setUserAddress(data.publicKey);
         setUserSecret(data.secretKey);
-        localStorage.setItem('sob_user_pub', data.publicKey);
-        setShowEntryModal(false);
-        setShowKeyModal(true); 
+        setKeysConfirmed(false);
+        setAuthStep('register_keys');
       } else {
-        alert("Failed to create account.");
+        addToast("Failed to generate wallet", "error");
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
   };
 
   const handleConfirmKeys = () => {
-    if(!keysConfirmed) return alert("Please confirm you saved your key.");
-    setShowKeyModal(false);
-    setUserSecret(null); 
-    setShowDashboard(true); 
+    if(!keysConfirmed) return addToast("Confirm you saved your key first", "error");
+    setAuthStep('register_creds');
+  };
+
+  const handleCompleteRegistration = async () => {
+    if(!username || !password) return addToast("All fields required", "error");
+    if(password !== confirmPassword) return addToast("Passwords do not match", "error");
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', username, password, publicKey: userAddress })
+      });
+      const data = await res.json();
+      
+      if(data.success) {
+        localStorage.setItem('sob_user_pub', userAddress);
+        addToast("Account Created Successfully!", "success");
+        setShowEntryModal(false);
+        setUserSecret(null); // Clear secret
+        setShowDashboard(true); // Open vault
+      } else {
+        addToast(data.error || "Registration failed", "error");
+      }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
+  };
+
+  const handleLogin = async () => {
+    if(!username || !password) return addToast("Enter username and password", "error");
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username, password })
+      });
+      const data = await res.json();
+      
+      if(data.success) {
+        setUserAddress(data.publicKey);
+        localStorage.setItem('sob_user_pub', data.publicKey);
+        addToast("Logged in successfully", "success");
+        refreshUserData(data.publicKey);
+        setShowEntryModal(false);
+      } else {
+        addToast(data.error || "Login failed", "error");
+      }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
   };
 
   const handleLogout = () => {
@@ -186,6 +251,9 @@ export default function App() {
     setShowEntryModal(false);
     setShowStakeSelect(false);
     setIsMenuOpen(false);
+    setAuthStep('selection');
+    
+    addToast("Logged out", "info");
   };
 
   // --- DEPOSIT CHECK ---
@@ -195,26 +263,26 @@ export default function App() {
     try {
       const res = await fetch('/api/deposit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ userAddress })
       });
       const data = await res.json();
       if(data.success) {
         setVaultBalance(data.newBalance);
-        if (data.newBalance > vaultBalance) {
-          alert(`Deposit Detected! New Balance: ${data.newBalance.toFixed(3)} SOL`);
-        } else {
-          alert("No new deposits detected yet.");
-        }
+        addToast(`Balance Synced: ${data.newBalance.toFixed(3)} SOL`, "success");
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
   };
 
   // --- GAMEPLAY ACTIONS ---
   const handleEnterArena = () => {
-    if (!userAddress) return setShowEntryModal(true);
+    if (!userAddress) {
+      setAuthStep('selection');
+      setShowEntryModal(true);
+      return;
+    }
     if (isEventStarted) {
-        alert("Event has started! Betting is closed. Viewing My Bets.");
+        addToast("Event Live! Betting Closed.", "info");
         setShowMyBets(true);
     } else {
         setShowStakeSelect(true); 
@@ -222,16 +290,16 @@ export default function App() {
   };
 
   const handleStartStreak = (amount) => {
-      if (!userAddress) return setShowEntryModal(true);
+      if (!userAddress) { setShowEntryModal(true); return; }
       
       const stakeVal = parseFloat(amount);
       if (isNaN(stakeVal) || stakeVal < 0.05 || stakeVal > 500) {
-          alert("Stake must be between 0.05 and 500 SOL");
+          addToast("Stake must be 0.05 - 500 SOL", "error");
           return;
       }
 
       if (stakeVal > vaultBalance) {
-          alert(`Insufficient SOL Balance. Please Deposit.`);
+          addToast(`Insufficient SOL. Please Deposit.`, "error");
           setShowStakeSelect(false);
           setShowDashboard(true); 
           return;
@@ -247,23 +315,18 @@ export default function App() {
   const handleAction = (selectionIndex) => {
       if (!userAddress) return;
       if (streakStake <= 0 || gameState !== 'playing') return;
-      if (isEventStarted) return alert("Betting Closed. Event Live.");
+      if (isEventStarted) return addToast("Betting Closed.", "error");
       
       const currentCard = marketDeck[currentIdx];
-
-      // GUARD: DUPLICATE CHECK (STREAK LOCKING)
-      // Check if this market ID is already in activePicks
       const isAlreadyPicked = activePicks.some(p => p.marketId === currentCard.id);
-      if (isAlreadyPicked) {
-          return; // Prevent adding again
-      }
+      if (isAlreadyPicked) return;
 
       const pick = {
           question: currentCard.question,
           outcome: selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no,
           odds: selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no,
           marketId: currentCard.id,
-          img: currentCard.img // Store image for My Bets display
+          img: currentCard.img 
       };
 
       const updatedPicks = [...activePicks, pick];
@@ -301,9 +364,10 @@ export default function App() {
           setCurrentIdx(0);
 
           setGameState('streak_submitted');
+          addToast("Streak Submitted Successfully!", "success");
 
       } catch (error) {
-          alert("Failed to submit streak: " + error.message);
+          addToast("Failed to submit streak: " + error.message, "error");
           setGameState('landing');
       } finally {
           setIsLoading(false);
@@ -312,8 +376,8 @@ export default function App() {
 
   const handleWithdraw = async () => {
     if (!userAddress) return;
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return alert("Invalid amount");
-    if (!withdrawDest) return alert("Enter destination address");
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return addToast("Invalid amount", "error");
+    if (!withdrawDest) return addToast("Enter destination address", "error");
     
     setIsLoading(true);
     try {
@@ -331,9 +395,9 @@ export default function App() {
         setVaultBalance(prev => prev - parseFloat(withdrawAmount));
         setWithdrawAmount('');
         setWithdrawDest('');
-        alert(`Withdrawal Success! Tx: ${data.signature}`);
+        addToast(`Withdrawal Success!`, "success");
       } else { throw new Error(data.error); }
-    } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
+    } catch (error) { addToast("Withdraw Failed: " + error.message, "error"); } finally { setIsLoading(false); }
   };
 
   const handleMaxWithdraw = () => {
@@ -343,25 +407,17 @@ export default function App() {
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    addToast("Copied to clipboard!", "success");
   };
 
-  if (isMarketsLoading) {
-      return (
-        <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white font-black animate-pulse">
-            <Activity className="w-12 h-12 text-cyan-500 mb-4 animate-spin" />
-            <span className="tracking-widest">LOADING PLATFORM...</span>
-        </div>
-      );
-  }
+  if (isMarketsLoading) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white font-black animate-pulse">LOADING PLATFORM...</div>;
 
-  // Visual Guard: Is current card already in active picks?
-  const currentCard = marketDeck[currentIdx];
-  const isCurrentCardPicked = activePicks.some(p => p.marketId === currentCard?.id);
   const isSidebarInteractive = userAddress && gameState === 'playing' && streakStake > 0;
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
+      <ToastContainer notifications={notifications} removeNotification={removeToast} />
+      
       {/* BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#1e0b3d_0%,#020205_75%)]" />
@@ -387,10 +443,10 @@ export default function App() {
             <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <Coins className="w-3.5 h-3.5" /> BUY $SOB
             </button>
-            <button onClick={() => {if (userAddress) setShowMyBets(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
+            <button onClick={() => {if (userAddress) setShowMyBets(true); else { setAuthStep('selection'); setShowEntryModal(true); }}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <History className="w-3.5 h-3.5" /> MY BETS
             </button>
-            <button onClick={() => {if (userAddress) setShowStakeSelect(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
+            <button onClick={() => {if (userAddress) setShowStakeSelect(true); else { setAuthStep('selection'); setShowEntryModal(true); }}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
               <PlusCircle className="w-3.5 h-3.5" /> START NEW STREAK
             </button>
             <button onClick={() => setShowLiveFeed(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-red-500 transition-colors">
@@ -421,7 +477,7 @@ export default function App() {
             </button>
           ) : (
              <button 
-                onClick={() => setShowEntryModal(true)}
+                onClick={() => { setAuthStep('selection'); setShowEntryModal(true); }}
                 className="px-6 py-2.5 bg-[#2563eb] rounded-xl text-[10px] font-black uppercase tracking-widest text-white hover:brightness-110 transition-all"
              >
                 LOGIN / SIGN UP
@@ -448,10 +504,10 @@ export default function App() {
             <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
             </button>
-            <button onClick={() => {if(userAddress) setShowMyBets(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+            <button onClick={() => {if(userAddress) setShowMyBets(true); else {setAuthStep('selection'); setShowEntryModal(true);} setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <History className="w-4 h-4 text-cyan-400" /> MY BETS
             </button>
-            <button onClick={() => {if(userAddress) setShowStakeSelect(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+            <button onClick={() => {if(userAddress) setShowStakeSelect(true); else {setAuthStep('selection'); setShowEntryModal(true);} setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <PlusCircle className="w-4 h-4 text-cyan-400" /> START NEW STREAK
             </button>
             <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
@@ -539,58 +595,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 2. NEW ACCOUNT KEYS MODAL */}
-      <AnimatePresence>
-        {showKeyModal && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="relative bg-[#0a0a10] border border-red-500/50 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="text-center mb-6">
-                <Key className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h3 className="text-2xl font-black italic uppercase text-white mb-2">Save Your Keys!</h3>
-                <p className="text-xs text-neutral-400">This is the ONLY time you will see your private key.</p>
-              </div>
-
-              <div className="space-y-4">
-                  <div className="bg-black/50 p-4 rounded-xl border border-white/10">
-                      <span className="text-[9px] text-neutral-500 uppercase block mb-1">Public Address</span>
-                      <div className="flex justify-between items-center">
-                          <span className="text-xs text-white font-mono break-all">{userAddress}</span>
-                          <button onClick={() => handleCopy(userAddress)}><Copy className="w-4 h-4 text-neutral-400 hover:text-white" /></button>
-                      </div>
-                  </div>
-
-                  <div className="bg-red-900/10 p-4 rounded-xl border border-red-500/30">
-                      <span className="text-[9px] text-red-400 uppercase block mb-1">Private Key (SECRET)</span>
-                      <div className="flex justify-between items-center">
-                          <span className="text-xs text-white font-mono break-all">{userSecret}</span>
-                          <button onClick={() => handleCopy(userSecret)}><Copy className="w-4 h-4 text-neutral-400 hover:text-white" /></button>
-                      </div>
-                  </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-center gap-3">
-                  <div 
-                    onClick={() => setKeysConfirmed(!keysConfirmed)}
-                    className={`w-5 h-5 rounded border cursor-pointer flex items-center justify-center transition-all ${keysConfirmed ? 'bg-red-600 border-red-600' : 'border-white/30'}`}
-                  >
-                      {keysConfirmed && <CheckCircle className="w-3 h-3 text-white" />}
-                  </div>
-                  <span className="text-[10px] text-neutral-400 font-bold uppercase cursor-pointer" onClick={() => setKeysConfirmed(!keysConfirmed)}>I have saved my private key securely</span>
-              </div>
-
-              <button 
-                onClick={handleConfirmKeys}
-                disabled={!keysConfirmed}
-                className="mt-6 w-full py-4 rounded-xl bg-white text-black font-black text-[10px] uppercase tracking-widest hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 3. MY BETS MODAL */}
+      {/* 2. MY BETS MODAL */}
       <AnimatePresence>
         {showMyBets && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
@@ -624,11 +629,9 @@ export default function App() {
                                           {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
                                       </span>
                                   </div>
-                                  {/* RENDER FULL LIST OF BETS */}
                                   <div className="mt-2 space-y-2">
                                       {streak.picks.map((p, i) => (
                                           <div key={i} className="flex items-center gap-3 bg-white/[0.02] p-2 rounded-lg border border-white/[0.05]">
-                                              {p.img && <img src={p.img} className="w-8 h-8 rounded-full object-cover" />}
                                               <div className="flex-1 min-w-0">
                                                   <div className="text-[8px] text-neutral-400 truncate uppercase">{p.question}</div>
                                                   <div className="text-[10px] font-bold text-white">{p.outcome}</div>
@@ -685,23 +688,106 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ENTRY MODAL */}
+      {/* ENTRY MODAL (MULTI-STEP) */}
       <AnimatePresence>
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => {setShowEntryModal(false); setAuthStep('selection');}} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
-              <div className="text-center mb-10">
-                <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                <h3 className="text-3xl font-black italic uppercase text-white mb-2">Player Access</h3>
-                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">No Wallet Connection Required</p>
-              </div>
-              <div className="grid grid-cols-1 gap-4">
-                <div onClick={handleCreateAccount} className="p-6 rounded-2xl bg-black border border-blue-500/30 hover:border-blue-500 cursor-pointer text-center group transition-all">
-                  <span className="text-[8px] font-black text-blue-500 block mb-1">NEW PLAYER</span>
-                  <p className="text-xs font-black text-white italic uppercase">Create Account</p>
+              
+              {/* STEP 1: SELECTION */}
+              {authStep === 'selection' && (
+                <>
+                  <div className="text-center mb-10">
+                    <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                    <h3 className="text-3xl font-black italic uppercase text-white mb-2">Player Access</h3>
+                    <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Secure Login System</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div onClick={() => setAuthStep('login')} className="p-6 rounded-2xl bg-black border border-white/20 hover:border-white cursor-pointer text-center group transition-all">
+                      <span className="text-[8px] font-black text-neutral-500 block mb-1 group-hover:text-white">EXISTING PLAYER</span>
+                      <p className="text-xs font-black text-white italic uppercase">Login</p>
+                    </div>
+                    <div onClick={handleStartCreateAccount} className="p-6 rounded-2xl bg-black border border-blue-500/30 hover:border-blue-500 cursor-pointer text-center group transition-all">
+                      <span className="text-[8px] font-black text-blue-500 block mb-1">NEW PLAYER</span>
+                      <p className="text-xs font-black text-white italic uppercase">Create Account</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* STEP 2: LOGIN FORM */}
+              {authStep === 'login' && (
+                <div className="flex flex-col gap-4">
+                  <div className="text-center mb-4">
+                    <LogIn className="w-8 h-8 text-white mx-auto mb-2" />
+                    <h3 className="text-xl font-black text-white uppercase">Login</h3>
+                  </div>
+                  <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-bold focus:outline-none focus:border-blue-500" />
+                  <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-bold focus:outline-none focus:border-blue-500" />
+                  <button onClick={handleLogin} disabled={isLoading} className="w-full py-4 rounded-xl bg-white text-black font-black text-[10px] uppercase hover:bg-gray-200 mt-2">
+                    {isLoading ? 'Logging in...' : 'Enter Arena'}
+                  </button>
+                  <button onClick={() => setAuthStep('selection')} className="text-[9px] text-neutral-500 hover:text-white mt-2">Back</button>
                 </div>
-              </div>
+              )}
+
+              {/* STEP 3: SHOW KEYS (REGISTER) */}
+              {authStep === 'register_keys' && (
+                <div className="flex flex-col gap-4">
+                  <div className="text-center mb-4">
+                    <Key className="w-12 h-12 text-red-500 mx-auto mb-2" />
+                    <h3 className="text-xl font-black text-white uppercase">Save Your Keys</h3>
+                    <p className="text-[9px] text-red-400">You will NOT see these again.</p>
+                  </div>
+                  
+                  <div className="bg-black/50 p-3 rounded-xl border border-white/10">
+                      <span className="text-[8px] text-neutral-500 uppercase block mb-1">Public Address</span>
+                      <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-white font-mono break-all">{userAddress}</span>
+                          <button onClick={() => handleCopy(userAddress)}><Copy className="w-3 h-3 text-white" /></button>
+                      </div>
+                  </div>
+
+                  <div className="bg-red-900/10 p-3 rounded-xl border border-red-500/30">
+                      <span className="text-[8px] text-red-400 uppercase block mb-1">Private Key (SECRET)</span>
+                      <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-white font-mono break-all">{userSecret}</span>
+                          <button onClick={() => handleCopy(userSecret)}><Copy className="w-3 h-3 text-white" /></button>
+                      </div>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3 mt-2">
+                      <div onClick={() => setKeysConfirmed(!keysConfirmed)} className={`w-5 h-5 rounded border cursor-pointer flex items-center justify-center ${keysConfirmed ? 'bg-red-600 border-red-600' : 'border-white/30'}`}>{keysConfirmed && <CheckCircle className="w-3 h-3 text-white" />}</div>
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase cursor-pointer" onClick={() => setKeysConfirmed(!keysConfirmed)}>I have saved my keys</span>
+                  </div>
+
+                  <button onClick={handleConfirmKeys} className="w-full py-4 rounded-xl bg-white text-black font-black text-[10px] uppercase hover:bg-gray-200 mt-2">Next</button>
+                </div>
+              )}
+
+              {/* STEP 4: CREATE CREDENTIALS (REGISTER) */}
+              {authStep === 'register_creds' && (
+                <div className="flex flex-col gap-4">
+                  <div className="text-center mb-4">
+                    <User className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    <h3 className="text-xl font-black text-white uppercase">Create Login</h3>
+                    <p className="text-[9px] text-neutral-400 max-w-xs mx-auto">
+                      Create a username and password to access your account easily. 
+                      <br/><span className="text-red-400">If you lose these, you must use your Private Key to recover funds externally.</span>
+                    </p>
+                  </div>
+                  
+                  <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-bold focus:outline-none focus:border-blue-500" />
+                  <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-bold focus:outline-none focus:border-blue-500" />
+                  <input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-[#0a0a10] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-bold focus:outline-none focus:border-blue-500" />
+                  
+                  <button onClick={handleCompleteRegistration} disabled={isLoading} className="w-full py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 mt-2">
+                    {isLoading ? 'Creating...' : 'Complete Registration'}
+                  </button>
+                </div>
+              )}
+
             </motion.div>
           </div>
         )}
@@ -773,38 +859,9 @@ export default function App() {
                   <Activity className="w-3 h-3 text-red-500 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-widest">Exchange: Seahawks vs Patriots</span>
                 </div>
-                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">
-                  SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span>
-                </h1>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto mb-10">
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-cyan-400/50 transition-colors">
-                    <span className="text-[10px] font-black text-cyan-400 block mb-2">STEP 01</span>
-                    <p className="text-xs font-bold text-neutral-400">Connect Wallet & Select Mode.</p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-red-500/50 transition-colors">
-                    <span className="text-[10px] font-black text-red-500 block mb-2">STEP 02</span>
-                    <p className="text-xs font-bold text-neutral-400">Select Stake & Start 10-Streak.</p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-purple-500/50 transition-colors">
-                    <span className="text-[10px] font-black text-purple-500 block mb-2">STEP 03</span>
-                    <p className="text-xs font-bold text-neutral-400">Win 10/10 to 3x your Stake.</p>
-                  </div>
-                </div>
-
+                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span></h1>
                 <div className="flex flex-wrap justify-center gap-4 mt-8">
-                  <button 
-                    onClick={handleEnterArena} 
-                    className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3"
-                  >
-                    Enter Betting Arena <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <div className="flex items-center gap-6 px-6 border-l border-white/10">
-                    <div className="flex flex-col items-start">
-                      <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Kickoff Event</span>
-                      <span className="text-xl font-black tabular-nums text-white">{countdown.h}H {countdown.m}M {countdown.s}S</span>
-                    </div>
-                  </div>
+                  <button onClick={handleEnterArena} className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3">Enter Betting Arena <ChevronRight className="w-4 h-4" /></button>
                 </div>
               </motion.div>
             )}
@@ -813,55 +870,25 @@ export default function App() {
               <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl h-full max-h-[580px] flex">
                 <div className="w-full bg-[#0c0c14]/95 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
                   <div className="w-full md:w-[45%] bg-black relative overflow-hidden group">
-                     {/* DYNAMIC IMAGE FROM API */}
                      {marketDeck[currentIdx]?.img && <img src={marketDeck[currentIdx].img} className="absolute inset-0 w-full h-full object-cover opacity-60" />}
                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
-                     
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
-                         {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
-                       </div>
-                       
-                       {/* LIVE ODDS PILL */}
-                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">
-                         {marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%
-                       </span>
+                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">{currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}</div>
+                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">{marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%</span>
                        <span className="text-[8px] font-bold text-white/30 mt-2">POLYMARKET DATA</span>
                      </div>
-                     <div className="absolute inset-0 border-r border-white/5" />
                   </div>
 
                   <div className="flex-1 p-8 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30">
-                            <Flame className="w-5 h-5 text-red-500" />
-                          </div>
-                          <div>
-                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span>
-                            <span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span>
-                            <span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span>
-                        </div>
+                        <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30"><Flame className="w-5 h-5 text-red-500" /></div><div><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span><span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span></div></div>
+                        <div className="text-right"><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span><span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span></div>
                       </div>
-
-                      {/* MAIN QUESTION DISPLAY */}
-                      <div className="min-h-[120px]">
-                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">
-                            {marketDeck[currentIdx]?.category}
-                        </span>
-                        <h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">
-                          {marketDeck[currentIdx]?.question}
-                        </h2>
-                      </div>
+                      <div className="min-h-[120px]"><span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{marketDeck[currentIdx]?.category}</span><h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">{marketDeck[currentIdx]?.question}</h2></div>
                     </div>
 
                     <div className="space-y-6">
-                      {/* DYNAMIC BUTTONS (LEFT=Outcome 1, RIGHT=Outcome 2) */}
                       <div className="grid grid-cols-2 gap-4">
                         <button 
                             onClick={() => handleAction(0)} 
@@ -870,14 +897,8 @@ export default function App() {
                                 ${isCurrentCardPicked ? 'bg-white/5 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:brightness-125'}
                             `}
                         >
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
-                                <>
-                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_yes}</span>
-                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>}
-                                </>
-                            )}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_yes}</span>{!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>}</>)}
                         </button>
-                        
                         <button 
                             onClick={() => handleAction(1)} 
                             disabled={isLoading || isCurrentCardPicked} 
@@ -885,12 +906,7 @@ export default function App() {
                                 ${isCurrentCardPicked ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-50' : 'bg-white/5 border border-white/10 hover:bg-white/10'}
                             `}
                         >
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
-                                <>
-                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_no}</span>
-                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>}
-                                </>
-                            )}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_no}</span>{!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>}</>)}
                         </button>
                       </div>
                     </div>
@@ -901,68 +917,26 @@ export default function App() {
           </AnimatePresence>
         </section>
         
-        {/* RIGHT SIDEBAR (Live Ticker / Market Selector) */}
+        {/* RIGHT SIDEBAR */}
         <aside className="hidden lg:flex flex-col gap-5 min-h-0 border-l border-white/5 pl-6 max-w-sm">
-          <div className="flex-none flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               <TrendingUp className="w-4 h-4 text-red-500" />
-               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span>
-             </div>
-          </div>
+          <div className="flex-none flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-red-500" /><span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span></div></div>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {marketDeck.map((m) => {
-              // Check if market is locked
               const isLocked = activePicks.some(p => p.marketId === m.id);
-              
               return (
-              <div 
-                key={m.id} 
-                className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
-                    ${isSidebarInteractive 
-                        ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
-                        : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
-                    ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
-                `} 
-                onClick={() => {
-                  if(isSidebarInteractive) {
-                      setCurrentIdx(m.visualIndex);
-                  }
-                }}
-              >
-                <div className="flex justify-between items-start mb-2">
-                    <span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>
-                    {isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}
-                </div>
+              <div key={m.id} className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all ${isSidebarInteractive ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'} ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}`} onClick={() => { if(isSidebarInteractive) setCurrentIdx(m.visualIndex); }}>
+                <div className="flex justify-between items-start mb-2"><span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>{isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}</div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
-                <div className="flex items-center gap-2">
-                    <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
-                    </div>
-                    <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
-                </div>
+                <div className="flex items-center gap-2"><div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} /></div><span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span></div>
               </div>
             )})}
           </div>
         </aside>
       </main>
 
-      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
-          {[1,2,3].map(i => (
-            <React.Fragment key={i}>
-              <div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500">
-                <Zap className="w-3 h-3 text-red-500" />
-                <span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span>
-                <Mic2 className="w-3 h-3 text-blue-400" />
-                <span>Halftime: Bad Bunny apple music show - first solo latino headliner</span>
-                <Music className="w-3 h-3 text-emerald-400" />
-                <span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span>
-                <TrendingUp className="w-3 h-3 text-white" />
-                <span>Super Bowl LX — the 60th NFL Championship game</span>
-              </div>
-            </React.Fragment>
-          ))}
+          {[1,2,3].map(i => (<React.Fragment key={i}><div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500"><Zap className="w-3 h-3 text-red-500" /><span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span><Mic2 className="w-3 h-3 text-blue-400" /><span>Halftime: Bad Bunny apple music show - first solo latino headliner</span><Music className="w-3 h-3 text-emerald-400" /><span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span><TrendingUp className="w-3 h-3 text-white" /><span>Super Bowl LX — the 60th NFL Championship game</span></div></React.Fragment>))}
         </div>
       </footer>
 
