@@ -51,23 +51,23 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
 const FALLBACK_DECK = [
   { 
     id: 0, 
-    question: "Super Bowl LX Winner", 
-    category: "SUPER BOWL LX", 
+    question: "Sam Darnold", 
+    category: "SUPER BOWL MVP", 
     img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", 
+    outcome_yes: "Yes", 
+    price_yes: 0.44, 
+    outcome_no: "No", 
+    price_no: 0.56 
+  },
+  { 
+    id: 1, 
+    question: "Seahawks vs Patriots", 
+    category: "GAME WINNER", 
+    img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", 
     outcome_yes: "Seahawks", 
     price_yes: 0.55, 
     outcome_no: "Patriots", 
     price_no: 0.45 
-  },
-  { 
-    id: 1, 
-    question: "Halftime Show Opener", 
-    category: "HALFTIME", 
-    img: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=800", 
-    outcome_yes: "Bad Bunny", 
-    price_yes: 0.70, 
-    outcome_no: "Other", 
-    price_no: 0.30 
   }
 ];
 
@@ -128,7 +128,6 @@ function GameContent() {
         }
       } catch (error) {
         console.error("Failed to stream markets", error);
-        // We keep fallback deck if fail
         setIsMarketsLoading(false);
       }
     }
@@ -272,11 +271,9 @@ function GameContent() {
   const handleAction = async (selectionIndex) => {
     // selectionIndex: 0 (Left Button), 1 (Right Button)
     
-    // Safety check for deck
     if (!marketDeck || marketDeck.length === 0) return;
     const currentCard = marketDeck[currentIdx];
     
-    // Determine which button was clicked
     const odds = selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no;
     const outcomeName = selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no;
 
@@ -287,18 +284,13 @@ function GameContent() {
             return alert("Demo Bankrupt! Balance Reset."); 
         }
         
-        // Simulation based on probabilities
         const isWin = Math.random() < odds; 
-        
-        // Payout Calculation: Stake / Probability
         const payout = betAmount / odds;
         
         if (isWin) {
             setStreak(prev => prev + 1);
-            // Profit = Payout - Stake
             setDemoBalance(prev => prev + (payout - betAmount)); 
             
-            // Move to next card
             if (currentIdx === marketDeck.length - 1) setGameState('winner');
             else setCurrentIdx(prev => prev + 1);
         } else {
@@ -330,7 +322,6 @@ function GameContent() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
 
-        // Update Balance from Server
         setVaultBalance(data.newBalance);
 
         if (data.isWin) {
@@ -433,47 +424,6 @@ function GameContent() {
           </button>
         </div>
       </nav>
-
-      {/* MOBILE MENU */}
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 z-[90] p-6 lg:hidden flex flex-col gap-4">
-            {walletAddress && (
-              <div className="flex flex-col pb-4 border-b border-white/10">
-                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Active Wallet</span>
-                <span className="text-sm font-black text-cyan-400">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
-                <div className="flex justify-between mt-2">
-                  <span className="text-[9px] font-black text-neutral-500 uppercase">
-                    {isRealMode ? 'Vault Balance' : 'Sim Balance'}
-                  </span>
-                  <span className="text-xs font-black text-white">{isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL</span>
-                </div>
-              </div>
-            )}
-            
-            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
-              <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
-            </button>
-            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
-              <Twitter className="w-4 h-4 text-[#1DA1F2]" /> TWITTER
-            </button>
-            <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
-              <Activity className="w-4 h-4 text-red-500" /> LIVE FEED
-            </button>
-
-            {walletAddress && (
-              <>
-                <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
-                  <User className="w-4 h-4" /> MY PROFILE
-                </button>
-                <button onClick={() => disconnect()} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
-                  <LogOut className="w-4 h-4" /> DISCONNECT
-                </button>
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* DASHBOARD MODAL */}
       <AnimatePresence>
@@ -585,7 +535,6 @@ function GameContent() {
         )}
       </AnimatePresence>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 p-6 overflow-hidden z-10">
         <section className="flex flex-col min-h-0 justify-center items-center">
           <AnimatePresence mode="wait">
@@ -643,8 +592,8 @@ function GameContent() {
                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
                          {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
                        </div>
-                       {/* SHOW LIVE ODDS */}
-                       {/* This displays the YES probability */}
+                       
+                       {/* LIVE ODDS PILL */}
                        <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">
                          {marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%
                        </span>
@@ -667,8 +616,11 @@ function GameContent() {
                         </div>
                       </div>
 
+                      {/* MAIN QUESTION DISPLAY */}
                       <div className="min-h-[120px]">
-                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{marketDeck[currentIdx]?.category}</span>
+                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">
+                            {marketDeck[currentIdx]?.category}
+                        </span>
                         <h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">
                           {marketDeck[currentIdx]?.question}
                         </h2>
@@ -685,15 +637,15 @@ function GameContent() {
                          </div>
                       </div>
                       
-                      {/* DYNAMIC BUTTONS (LEFT=YES, RIGHT=NO) */}
+                      {/* DYNAMIC BUTTONS (LEFT=Outcome 1, RIGHT=Outcome 2) */}
                       <div className="grid grid-cols-2 gap-4">
-                        {/* Button 0: Outcome 1 (Usually Yes/Team A) */}
+                        {/* Button 1: Usually "Yes" or "Team A" */}
                         <button onClick={() => handleAction(0)} className="py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-[10px] uppercase tracking-widest hover:brightness-125 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all">
                             <span>{marketDeck[currentIdx]?.outcome_yes}</span>
                             <span className="text-[8px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>
                         </button>
                         
-                        {/* Button 1: Outcome 2 (Usually No/Team B) */}
+                        {/* Button 2: Usually "No" or "Team B" */}
                         <button onClick={() => handleAction(1)} className="py-4 rounded-xl bg-white/5 border border-white/10 text-white font-black text-[10px] uppercase tracking-widest hover:bg-white/10 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all">
                             <span>{marketDeck[currentIdx]?.outcome_no}</span>
                             <span className="text-[8px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>
@@ -740,7 +692,7 @@ function GameContent() {
                 className={`group relative p-4 rounded-2xl bg-white/[0.03] border overflow-hidden backdrop-blur-md hover:border-cyan-500/30 transition-all cursor-pointer ${currentIdx === m.id ? 'border-cyan-500/50 bg-white/[0.05]' : 'border-white/[0.08]'}`} 
                 onClick={() => {
                   setCurrentIdx(m.id);
-                  setGameState('playing'); // Ensure we are in playing state if clicked from landing
+                  setGameState('playing'); 
                 }}
               >
                 <div className="flex justify-between items-start mb-2">
@@ -749,7 +701,6 @@ function GameContent() {
                 </div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
                 <div className="flex items-center gap-2">
-                    {/* Visual bar for probability */}
                     <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
                         <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
                     </div>
