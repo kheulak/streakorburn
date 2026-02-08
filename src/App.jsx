@@ -5,6 +5,7 @@ import {
   ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
   ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Layers, PlusCircle, Copy, Key
 } from 'lucide-react';
+import { ToastContainer } from './components/Toast';
 
 // --- CONFIGURATION ---
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
@@ -24,10 +25,10 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
   </svg>
 );
 
-// Fallback Data (Now includes visualIndex to prevent crashes)
+// Fallback Data
 const FALLBACK_DECK = [
-  { id: 'fb-1', visualIndex: 0, question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
-  { id: 'fb-2', visualIndex: 1, question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
+  { id: 'fb-1', question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
+  { id: 'fb-2', question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
 ];
 
 export default function App() {
@@ -35,6 +36,9 @@ export default function App() {
   const [gameState, setGameState] = useState('landing'); 
   const [currentIdx, setCurrentIdx] = useState(0);
   
+  // TOAST STATE
+  const [notifications, setNotifications] = useState([]);
+
   // STREAK LOGIC STATE
   const [activePicks, setActivePicks] = useState([]); 
   const [streakStake, setStreakStake] = useState(0); 
@@ -73,12 +77,23 @@ export default function App() {
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
+  // --- NOTIFICATION HELPERS ---
+  const addToast = (message, type = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   // --- 1. INITIAL LOAD ---
   useEffect(() => {
     const storedPub = localStorage.getItem('sob_user_pub');
     if (storedPub) {
       setUserAddress(storedPub);
       refreshUserData(storedPub);
+      addToast('Welcome back!', 'success');
     }
   }, []);
 
@@ -106,7 +121,6 @@ export default function App() {
         const data = await res.json();
         
         if (isMounted && data && Array.isArray(data) && data.length > 0) {
-          // Use ID from backend as unique key and assign visual index
           const indexedData = data.map((item, index) => ({...item, visualIndex: index}));
           setMarketDeck(indexedData);
         }
@@ -161,16 +175,17 @@ export default function App() {
         setShowEntryModal(false);
         setShowKeyModal(true); 
       } else {
-        alert("Failed to create account.");
+        addToast("Failed to create account.", "error");
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
   };
 
   const handleConfirmKeys = () => {
-    if(!keysConfirmed) return alert("Please confirm you saved your key.");
+    if(!keysConfirmed) return addToast("Please confirm you saved your key.", "error");
     setShowKeyModal(false);
     setUserSecret(null); 
     setShowDashboard(true); 
+    addToast("Account Created!", "success");
   };
 
   const handleLogout = () => {
@@ -186,6 +201,7 @@ export default function App() {
     setShowEntryModal(false);
     setShowStakeSelect(false);
     setIsMenuOpen(false);
+    addToast("Logged out", "info");
   };
 
   // --- DEPOSIT CHECK ---
@@ -202,19 +218,19 @@ export default function App() {
       if(data.success) {
         setVaultBalance(data.newBalance);
         if (data.newBalance > vaultBalance) {
-          alert(`Deposit Detected! New Balance: ${data.newBalance.toFixed(3)} SOL`);
+            addToast(`Deposit Detected! Balance: ${data.newBalance.toFixed(3)} SOL`, "success");
         } else {
-          alert("No new deposits detected yet.");
+            addToast("No new deposits detected.", "info");
         }
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch(e) { addToast(e.message, "error"); } finally { setIsLoading(false); }
   };
 
   // --- GAMEPLAY ACTIONS ---
   const handleEnterArena = () => {
     if (!userAddress) return setShowEntryModal(true);
     if (isEventStarted) {
-        alert("Event has started! Betting is closed. Viewing My Bets.");
+        addToast("Event has started! Betting closed.", "info");
         setShowMyBets(true);
     } else {
         setShowStakeSelect(true); 
@@ -226,12 +242,12 @@ export default function App() {
       
       const stakeVal = parseFloat(amount);
       if (isNaN(stakeVal) || stakeVal < 0.05 || stakeVal > 500) {
-          alert("Stake must be between 0.05 and 500 SOL");
+          addToast("Stake must be 0.05 - 500 SOL", "error");
           return;
       }
 
       if (stakeVal > vaultBalance) {
-          alert(`Insufficient SOL Balance. Please Deposit.`);
+          addToast(`Insufficient SOL. Please Deposit.`, "error");
           setShowStakeSelect(false);
           setShowDashboard(true); 
           return;
@@ -247,17 +263,16 @@ export default function App() {
   const handleAction = (selectionIndex) => {
       if (!userAddress) return;
       if (streakStake <= 0 || gameState !== 'playing') return;
-      if (isEventStarted) return alert("Betting Closed. Event Live.");
+      if (isEventStarted) return addToast("Betting Closed.", "error");
       
       const currentCard = marketDeck[currentIdx];
-      // Defensive check: Ensure currentCard exists
+      // Defensive check
       if (!currentCard) return;
 
       // GUARD: DUPLICATE CHECK (STREAK LOCKING)
-      // Check if this market ID is already in activePicks
       const isAlreadyPicked = activePicks.some(p => p.marketId === currentCard.id);
       if (isAlreadyPicked) {
-          return; // Prevent adding again
+          return; 
       }
 
       const pick = {
@@ -265,7 +280,7 @@ export default function App() {
           outcome: selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no,
           odds: selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no,
           marketId: currentCard.id,
-          img: currentCard.img // Store image for My Bets display
+          img: currentCard.img 
       };
 
       const updatedPicks = [...activePicks, pick];
@@ -307,9 +322,10 @@ export default function App() {
           setCurrentIdx(0);
 
           setGameState('streak_submitted');
+          addToast("Streak Locked In!", "success");
 
       } catch (error) {
-          alert("Failed to submit streak: " + error.message);
+          addToast("Failed to submit streak: " + error.message, "error");
           setGameState('landing');
       } finally {
           setIsLoading(false);
@@ -318,8 +334,8 @@ export default function App() {
 
   const handleWithdraw = async () => {
     if (!userAddress) return;
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return alert("Invalid amount");
-    if (!withdrawDest) return alert("Enter destination address");
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return addToast("Invalid amount", "error");
+    if (!withdrawDest) return addToast("Enter destination address", "error");
     
     setIsLoading(true);
     try {
@@ -337,9 +353,9 @@ export default function App() {
         setVaultBalance(prev => prev - parseFloat(withdrawAmount));
         setWithdrawAmount('');
         setWithdrawDest('');
-        alert(`Withdrawal Success! Tx: ${data.signature}`);
+        addToast(`Withdrawal Success! Tx: ${data.signature?.slice(0,8)}...`, "success");
       } else { throw new Error(data.error); }
-    } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
+    } catch (error) { addToast("Withdraw Failed: " + error.message, "error"); } finally { setIsLoading(false); }
   };
 
   const handleMaxWithdraw = () => {
@@ -349,7 +365,7 @@ export default function App() {
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    addToast("Copied to clipboard!", "success");
   };
 
   if (isMarketsLoading) {
@@ -368,6 +384,8 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
+      <ToastContainer notifications={notifications} removeNotification={removeToast} />
+      
       {/* BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#1e0b3d_0%,#020205_75%)]" />
@@ -843,12 +861,35 @@ export default function App() {
           <div className="flex-none flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-red-500" /><span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span></div></div>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {marketDeck.map((m) => {
+              // Check if market is locked
               const isLocked = activePicks.some(p => p.marketId === m.id);
+              
               return (
-              <div key={m.id} className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all ${isSidebarInteractive ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'} ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}`} onClick={() => { if(isSidebarInteractive) setCurrentIdx(m.visualIndex); }}>
-                <div className="flex justify-between items-start mb-2"><span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>{isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}</div>
+              <div 
+                key={m.id} 
+                className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
+                    ${isSidebarInteractive 
+                        ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
+                        : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
+                    ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
+                `} 
+                onClick={() => {
+                  if(isSidebarInteractive) {
+                      setCurrentIdx(m.visualIndex);
+                  }
+                }}
+              >
+                <div className="flex justify-between items-start mb-2">
+                    <span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>
+                    {isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}
+                </div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
-                <div className="flex items-center gap-2"><div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} /></div><span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span></div>
+                <div className="flex items-center gap-2">
+                    <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
+                    </div>
+                    <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
+                </div>
               </div>
             )})}
           </div>
