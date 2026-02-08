@@ -8,51 +8,42 @@ export default async function handler(req, res) {
 
   const { userAddress } = req.query;
 
-  // --- GET: Fetch All Streaks & Balances ---
+  // --- GET: Fetch All Streaks & Real Balance ---
   if (req.method === 'GET') {
     if (!userAddress) return res.status(400).json({ error: 'Missing address' });
 
     try {
       const history = await redis.get(`streaks:${userAddress}`) || [];
       const realBalance = await redis.get(`balance:${userAddress}`) || 0;
-      const simBalance = await redis.get(`sim_balance:${userAddress}`) || 1000; // Default 1000 Sim SOL
 
       return res.status(200).json({ 
         history, 
-        realBalance: parseFloat(realBalance), 
-        simBalance: parseFloat(simBalance) 
+        realBalance: parseFloat(realBalance)
       });
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
   }
 
-  // --- POST: Create New Streak (Lock Stake) ---
+  // --- POST: Create New Streak (Lock Real Stake) ---
   if (req.method === 'POST') {
-    const { userAddress, mode, stake, picks } = req.body;
+    const { userAddress, stake, picks } = req.body;
 
     try {
-      // 1. Validate & Deduct Funds
-      if (mode === 'real') {
-        const currentBal = await redis.get(`balance:${userAddress}`);
-        if (!currentBal || parseFloat(currentBal) < parseFloat(stake)) {
-          return res.status(403).json({ error: 'Insufficient Real SOL' });
-        }
-        await redis.incrbyfloat(`balance:${userAddress}`, -parseFloat(stake));
-      } else {
-        // Sim Mode
-        const currentSim = await redis.get(`sim_balance:${userAddress}`) || 1000;
-        if (parseFloat(currentSim) < parseFloat(stake)) {
-          return res.status(403).json({ error: 'Insufficient Sim SOL' });
-        }
-        await redis.incrbyfloat(`sim_balance:${userAddress}`, -parseFloat(stake));
+      // 1. Validate & Deduct Real Funds
+      const currentBal = await redis.get(`balance:${userAddress}`);
+      if (!currentBal || parseFloat(currentBal) < parseFloat(stake)) {
+        return res.status(403).json({ error: 'Insufficient SOL Balance' });
       }
+      
+      // Deduct the stake immediately
+      await redis.incrbyfloat(`balance:${userAddress}`, -parseFloat(stake));
 
       // 2. Create Streak Object
       const newStreak = {
         id: `STREAK-${Date.now()}`,
         date: new Date().toISOString(),
-        mode,
+        mode: 'real', // Always real now
         stake: parseFloat(stake),
         potentialPayout: parseFloat(stake) * 3, // 3x Multiplier Rule
         status: 'PENDING', // Always PENDING before event
@@ -67,13 +58,11 @@ export default async function handler(req, res) {
 
       // 4. Return new data
       const newReal = await redis.get(`balance:${userAddress}`);
-      const newSim = await redis.get(`sim_balance:${userAddress}`) || 1000;
 
       return res.status(200).json({ 
         success: true, 
         streak: newStreak,
-        realBalance: parseFloat(newReal || 0),
-        simBalance: parseFloat(newSim)
+        realBalance: parseFloat(newReal || 0)
       });
 
     } catch (error) {
