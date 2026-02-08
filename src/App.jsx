@@ -409,7 +409,7 @@ export default function App() {
           
           <div className="hidden lg:flex items-center gap-8">
             <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
-              <Coins className="w-3.5 h-3.5" /> BUY $SOB
+              <Coins className="w-3.5 h-3.5" /> <a href="https://pump.fun/coin/3GwrnQFtMh7f2qUx2QT6WCoBcBLKFJAgMj2tDgYHpump">BUY $SOB</a>
             </button>
             <button onClick={() => {if (userAddress) setShowMyBets(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <History className="w-3.5 h-3.5" /> MY BETS
