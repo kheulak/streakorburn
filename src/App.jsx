@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
 const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
@@ -279,7 +278,8 @@ function GameContent() {
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || parseFloat(depositAmount) <= 0) return alert("Invalid amount");
-    if (HOUSE_WALLET_ADDRESS === "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt") return alert("Dev Error: Address not set");
+    
+    // GUARD REMOVED: House address is strictly hardcoded above, no need to check validity of string.
 
     try {
         setIsLoading(true);
