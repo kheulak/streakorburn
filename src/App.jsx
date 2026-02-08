@@ -75,7 +75,6 @@ function GameContent() {
 
   // --- 1. INITIAL LOAD (LOCAL STORAGE) ---
   useEffect(() => {
-    // Check local storage for existing session
     const storedPub = localStorage.getItem('sob_user_pub');
     if (storedPub) {
       setUserAddress(storedPub);
@@ -85,10 +84,9 @@ function GameContent() {
 
   const refreshUserData = async (addr) => {
       try {
-          const addressToUse = addr || userAddress;
-          if (!addressToUse) return;
-
-          const res = await fetch(`/api/streak?userAddress=${addressToUse}`);
+          const address = addr || userAddress;
+          if(!address) return;
+          const res = await fetch(`/api/streak?userAddress=${address}`);
           const data = await res.json();
           if (data.history) setStreakHistory(data.history);
           if (data.realBalance !== undefined) setVaultBalance(data.realBalance);
@@ -106,11 +104,10 @@ function GameContent() {
         if (data && Array.isArray(data) && data.length > 0) {
           const indexedData = data.map((item, index) => ({...item, id: index}));
           setMarketDeck(indexedData);
+          setIsMarketsLoading(false);
         }
       } catch (error) {
         console.error("Failed to stream markets", error);
-      } finally {
-        // ALWAYS STOP LOADING, EVEN IF FAIL
         setIsMarketsLoading(false);
       }
     }
@@ -140,43 +137,31 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- ACCOUNT CREATION ---
+  // --- ACCOUNT ACTIONS ---
+  
   const handleCreateAccount = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/create-account', { method: 'POST' });
       const data = await res.json();
-      
-      if (data.success) {
+      if(data.success) {
         setUserAddress(data.publicKey);
         setUserSecret(data.secretKey);
-        setKeysConfirmed(false);
-        
-        // Save session
         localStorage.setItem('sob_user_pub', data.publicKey);
         
         setShowEntryModal(false);
-        setShowKeyModal(true); // Force user to see keys
+        setShowKeyModal(true); // Force show keys
       } else {
-        alert("Failed to create account.");
+        alert("Creation Failed");
       }
-    } catch (e) {
-      alert("Error: " + e.message);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
   };
 
   const handleConfirmKeys = () => {
-    if (!keysConfirmed) {
-        alert("You must confirm that you have copied your Private Key.");
-        return;
-    }
-    setShowNewAccountModal(false); // Hide keys
+    if(!keysConfirmed) return alert("Please confirm you saved your key.");
     setShowKeyModal(false);
     setUserSecret(null); // Clear from memory
-    alert("Account Created! You can now deposit funds.");
-    setShowDashboard(true); // Open vault to show deposit address
+    setShowDashboard(true); // Show deposit address
   };
 
   const handleLogout = () => {
@@ -187,6 +172,7 @@ function GameContent() {
     setActivePicks([]);
     setStreakStake(0);
     
+    // Close All
     setShowDashboard(false);
     setShowMyBets(false);
     setShowEntryModal(false);
@@ -196,36 +182,62 @@ function GameContent() {
 
   // --- DEPOSIT CHECK ---
   const handleCheckDeposit = async () => {
-    if (!userAddress) return;
+    if(!userAddress) return;
     setIsLoading(true);
     try {
       const res = await fetch('/api/deposit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ userAddress })
       });
       const data = await res.json();
-      if (data.success) {
+      if(data.success) {
         setVaultBalance(data.newBalance);
-        if (data.newBalance > vaultBalance) {
-          alert(`Deposit Detected! New Balance: ${data.newBalance.toFixed(3)} SOL`);
-        } else {
-          alert("No new deposits detected yet. Please wait a moment.");
-        }
+        alert(`Balance Updated: ${data.newBalance.toFixed(3)} SOL`);
       }
-    } catch (e) {
-      alert("Check failed: " + e.message);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
   };
 
-  // --- GAMEPLAY ACTIONS ---
+  // --- WITHDRAW ---
+  const handleWithdraw = async () => {
+    if(!userAddress) return;
+    if(!withdrawAmount || !withdrawDest) return alert("Invalid Input");
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          userAddress,
+          amount: withdrawAmount,
+          destinationAddress: withdrawDest
+        })
+      });
+      const data = await res.json();
+      if(data.status === 'success') {
+        alert(`Sent! Tx: ${data.signature}`);
+        setWithdrawAmount('');
+        setWithdrawDest('');
+        handleCheckDeposit(); // Refresh balance
+      } else {
+        throw new Error(data.error);
+      }
+    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+  };
+
+  const handleMaxWithdraw = () => {
+    // Leave 0.002 for gas
+    const max = vaultBalance - 0.002;
+    setWithdrawAmount(max > 0 ? max.toFixed(4) : '0');
+  };
+
+  // --- GAME ACTIONS ---
+
   const handleEnterArena = () => {
     if (!userAddress) return setShowEntryModal(true);
-    
     if (isEventStarted) {
-        alert("Event has started! Betting is closed. Viewing My Bets.");
+        alert("Event Live! Betting Closed.");
         setShowMyBets(true);
     } else {
         setShowStakeSelect(true); 
@@ -234,20 +246,17 @@ function GameContent() {
 
   const handleStartStreak = (amount) => {
       if (!userAddress) return setShowEntryModal(true);
-      
       const stakeVal = parseFloat(amount);
       if (isNaN(stakeVal) || stakeVal < 0.05 || stakeVal > 500) {
-          alert("Stake must be between 0.05 and 500 SOL");
+          alert("Stake must be 0.05 - 500 SOL");
           return;
       }
-
       if (stakeVal > vaultBalance) {
-          alert(`Insufficient SOL Balance. Please Deposit.`);
+          alert(`Insufficient SOL. Please Deposit.`);
           setShowStakeSelect(false);
           setShowDashboard(true); 
           return;
       }
-      
       setStreakStake(stakeVal);
       setActivePicks([]); 
       setCurrentIdx(0);   
@@ -258,7 +267,7 @@ function GameContent() {
   const handleAction = (selectionIndex) => {
       if (!userAddress) return;
       if (streakStake <= 0 || gameState !== 'playing') return;
-      if (isEventStarted) return alert("Betting Closed. Event Live.");
+      if (isEventStarted) return alert("Betting Closed.");
       
       const currentCard = marketDeck[currentIdx];
       const pick = {
@@ -281,83 +290,39 @@ function GameContent() {
   const submitStreak = async (finalPicks) => {
       setIsLoading(true);
       try {
-          const response = await fetch('/api/streak', {
+          const res = await fetch('/api/streak', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                  userAddress: userAddress,
+                  userAddress,
                   stake: streakStake,
                   picks: finalPicks
               })
           });
-
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error);
+          const data = await res.json();
+          if(!res.ok) throw new Error(data.error);
 
           setStreakHistory(prev => [data.streak, ...prev]);
-          if (data.realBalance !== undefined) setVaultBalance(data.realBalance);
+          if(data.realBalance !== undefined) setVaultBalance(data.realBalance);
 
           setActivePicks([]); 
           setStreakStake(0);
           setCustomStake('');
           setCurrentIdx(0);
-
           setGameState('streak_submitted');
 
-      } catch (error) {
-          alert("Failed to submit streak: " + error.message);
+      } catch(e) {
+          alert("Submit Failed: " + e.message);
           setGameState('landing');
-      } finally {
-          setIsLoading(false);
-      }
+      } finally { setIsLoading(false); }
   };
 
-  const handleWithdraw = async () => {
-    if (!userAddress) return;
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return alert("Invalid amount");
-    if (!withdrawDest) return alert("Enter destination address");
-    
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/withdraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            userAddress: userAddress, 
-            amount: parseFloat(withdrawAmount),
-            destinationAddress: withdrawDest
-        })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setVaultBalance(prev => prev - parseFloat(withdrawAmount));
-        setWithdrawAmount('');
-        setWithdrawDest('');
-        alert(`Withdrawal Success! Tx: ${data.signature}`);
-      } else { throw new Error(data.error); }
-    } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
+  const handleCopy = (txt) => {
+    navigator.clipboard.writeText(txt);
+    alert("Copied!");
   };
 
-  const handleMaxWithdraw = () => {
-      const max = vaultBalance - 0.002;
-      setWithdrawAmount(max > 0 ? max.toFixed(4) : '0');
-  };
-
-  const handleCopy = (text) => {
-    navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
-  };
-
-  // --- RENDER ---
-
-  if (isMarketsLoading) {
-      return (
-        <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white font-black animate-pulse">
-            <Activity className="w-12 h-12 text-cyan-500 mb-4 animate-spin" />
-            <span className="tracking-widest">LOADING PLATFORM...</span>
-        </div>
-      );
-  }
+  if (isMarketsLoading) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white font-black animate-pulse">LOADING...</div>;
 
   const isSidebarInteractive = userAddress && gameState === 'playing' && streakStake > 0;
 
@@ -377,9 +342,7 @@ function GameContent() {
           <div onClick={() => setGameState('landing')} className="flex items-center gap-3 cursor-pointer group">
             <CustomLogo className="w-8 h-8 group-hover:rotate-12 transition-transform" />
             <div className="flex flex-col">
-              <span className="font-black tracking-tighter text-xl uppercase italic group-hover:text-cyan-400 transition-colors">
-                STREAK<span className="text-red-500">OR</span>BURN
-              </span>
+              <span className="font-black tracking-tighter text-xl uppercase italic group-hover:text-cyan-400 transition-colors">STREAK<span className="text-red-500">OR</span>BURN</span>
               <span className="text-[7px] font-bold text-cyan-400 uppercase tracking-[0.4em]">SUPER BOWL LX</span>
             </div>
           </div>
@@ -388,10 +351,10 @@ function GameContent() {
             <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <Coins className="w-3.5 h-3.5" /> BUY $SOB
             </button>
-            <button onClick={() => {if (userAddress) setShowMyBets(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
+            <button onClick={() => {if(userAddress) setShowMyBets(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
               <History className="w-3.5 h-3.5" /> MY BETS
             </button>
-            <button onClick={() => {if (userAddress) setShowStakeSelect(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
+            <button onClick={() => {if(userAddress) setShowStakeSelect(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
               <PlusCircle className="w-3.5 h-3.5" /> START NEW STREAK
             </button>
             <button onClick={() => setShowLiveFeed(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-red-500 transition-colors">
@@ -403,31 +366,17 @@ function GameContent() {
         <div className="flex items-center gap-6">
           {userAddress && (
             <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
-              <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
-                Vault Balance
-              </span>
-              <span className="text-xs font-black text-white tabular-nums">
-                {vaultBalance.toFixed(3)} SOL
-              </span>
+              <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">Vault Balance</span>
+              <span className="text-xs font-black text-white tabular-nums">{vaultBalance.toFixed(3)} SOL</span>
             </div>
           )}
           
-          {userAddress ? (
-            <button 
-              onClick={() => setShowDashboard(true)}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-black text-[9px] uppercase tracking-widest hover:brightness-110 transition-all duration-300 flex items-center gap-2 border border-white/20"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>{userAddress.slice(0, 4)}...{userAddress.slice(-4)}</span>
-            </button>
-          ) : (
-             <button 
-                onClick={() => setShowEntryModal(true)}
-                className="px-6 py-2.5 bg-[#2563eb] rounded-xl text-[10px] font-black uppercase tracking-widest text-white hover:brightness-110 transition-all"
-             >
-                LOGIN / SIGN UP
-             </button>
-          )}
+          <button 
+            onClick={() => userAddress ? setShowDashboard(true) : setShowEntryModal(true)}
+            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-2 ${userAddress ? 'bg-black border-white/20 text-white' : 'bg-[#2563eb] border-transparent text-white hover:brightness-110'}`}
+          >
+            {userAddress ? <><User className="w-3.5 h-3.5" /> {userAddress.slice(0,4)}...{userAddress.slice(-4)}</> : "LOGIN / SIGNUP"}
+          </button>
 
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-white/70 hover:text-white">
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -625,14 +574,16 @@ function GameContent() {
                                           {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
                                       </span>
                                   </div>
-                                  <div className="mt-2 grid grid-cols-2 gap-2">
-                                      {streak.picks.slice(0,4).map((p, i) => (
-                                          <div key={i} className="text-[7px] text-neutral-400 truncate flex justify-between">
-                                              <span>{p.outcome}</span>
-                                              <span className="text-neutral-600">{(p.odds * 100).toFixed(0)}%</span>
+                                  <div className="mt-2 space-y-2">
+                                      {streak.picks.map((p, i) => (
+                                          <div key={i} className="flex items-center gap-3 bg-white/[0.02] p-2 rounded-lg border border-white/[0.05]">
+                                              <div className="flex-1 min-w-0">
+                                                  <div className="text-[8px] text-neutral-400 truncate uppercase">{p.question}</div>
+                                                  <div className="text-[10px] font-bold text-white">{p.outcome}</div>
+                                              </div>
+                                              <div className="text-[9px] font-mono text-cyan-400">{(p.odds * 100).toFixed(0)}%</div>
                                           </div>
                                       ))}
-                                      {streak.picks.length > 4 && <div className="text-[7px] text-neutral-600 italic">... +{streak.picks.length - 4} more</div>}
                                   </div>
                               </div>
                           </div>
@@ -760,7 +711,6 @@ function GameContent() {
         )}
       </AnimatePresence>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 p-6 overflow-hidden z-10">
         <section className="flex flex-col min-h-0 justify-center items-center">
           <AnimatePresence mode="wait">
@@ -770,38 +720,9 @@ function GameContent() {
                   <Activity className="w-3 h-3 text-red-500 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-widest">Exchange: Seahawks vs Patriots</span>
                 </div>
-                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">
-                  SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span>
-                </h1>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto mb-10">
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-cyan-400/50 transition-colors">
-                    <span className="text-[10px] font-black text-cyan-400 block mb-2">STEP 01</span>
-                    <p className="text-xs font-bold text-neutral-400">Connect Wallet & Select Mode.</p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-red-500/50 transition-colors">
-                    <span className="text-[10px] font-black text-red-500 block mb-2">STEP 02</span>
-                    <p className="text-xs font-bold text-neutral-400">Select Stake & Start 10-Streak.</p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-purple-500/50 transition-colors">
-                    <span className="text-[10px] font-black text-purple-500 block mb-2">STEP 03</span>
-                    <p className="text-xs font-bold text-neutral-400">Win 10/10 to 3x your Stake.</p>
-                  </div>
-                </div>
-
+                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span></h1>
                 <div className="flex flex-wrap justify-center gap-4 mt-8">
-                  <button 
-                    onClick={handleEnterArena} 
-                    className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3"
-                  >
-                    Enter Betting Arena <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <div className="flex items-center gap-6 px-6 border-l border-white/10">
-                    <div className="flex flex-col items-start">
-                      <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Kickoff Event</span>
-                      <span className="text-xl font-black tabular-nums text-white">{countdown.h}H {countdown.m}M {countdown.s}S</span>
-                    </div>
-                  </div>
+                  <button onClick={handleEnterArena} className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3">Enter Betting Arena <ChevronRight className="w-4 h-4" /></button>
                 </div>
               </motion.div>
             )}
@@ -810,72 +731,31 @@ function GameContent() {
               <motion.div key="playing" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl h-full max-h-[580px] flex">
                 <div className="w-full bg-[#0c0c14]/95 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col md:flex-row shadow-2xl relative">
                   <div className="w-full md:w-[45%] bg-black relative overflow-hidden group">
-                     {/* DYNAMIC IMAGE FROM API */}
                      {marketDeck[currentIdx]?.img && <img src={marketDeck[currentIdx].img} className="absolute inset-0 w-full h-full object-cover opacity-60" />}
                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
-                     
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
-                         {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
-                       </div>
-                       
-                       {/* LIVE ODDS PILL */}
-                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">
-                         {marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%
-                       </span>
+                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">{currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}</div>
+                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">{marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%</span>
                        <span className="text-[8px] font-bold text-white/30 mt-2">POLYMARKET DATA</span>
                      </div>
-                     <div className="absolute inset-0 border-r border-white/5" />
                   </div>
 
                   <div className="flex-1 p-8 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30">
-                            <Flame className="w-5 h-5 text-red-500" />
-                          </div>
-                          <div>
-                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span>
-                            <span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span>
-                            <span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span>
-                        </div>
+                        <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30"><Flame className="w-5 h-5 text-red-500" /></div><div><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span><span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span></div></div>
+                        <div className="text-right"><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span><span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span></div>
                       </div>
-
-                      {/* MAIN QUESTION DISPLAY */}
-                      <div className="min-h-[120px]">
-                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">
-                            {marketDeck[currentIdx]?.category}
-                        </span>
-                        <h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">
-                          {marketDeck[currentIdx]?.question}
-                        </h2>
-                      </div>
+                      <div className="min-h-[120px]"><span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{marketDeck[currentIdx]?.category}</span><h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">{marketDeck[currentIdx]?.question}</h2></div>
                     </div>
 
                     <div className="space-y-6">
-                      {/* DYNAMIC BUTTONS (LEFT=Outcome 1, RIGHT=Outcome 2) */}
                       <div className="grid grid-cols-2 gap-4">
                         <button onClick={() => handleAction(0)} disabled={isLoading} className="py-6 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-[12px] uppercase tracking-widest hover:brightness-125 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]">
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
-                                <>
-                                    <span>{marketDeck[currentIdx]?.outcome_yes}</span>
-                                    <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>
-                                </>
-                            )}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{marketDeck[currentIdx]?.outcome_yes}</span><span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span></>)}
                         </button>
-                        
                         <button onClick={() => handleAction(1)} disabled={isLoading} className="py-6 rounded-xl bg-white/5 border border-white/10 text-white font-black text-[12px] uppercase tracking-widest hover:bg-white/10 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all">
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
-                                <>
-                                    <span>{marketDeck[currentIdx]?.outcome_no}</span>
-                                    <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>
-                                </>
-                            )}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{marketDeck[currentIdx]?.outcome_no}</span><span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span></>)}
                         </button>
                       </div>
                     </div>
@@ -886,64 +766,24 @@ function GameContent() {
           </AnimatePresence>
         </section>
         
-        {/* RIGHT SIDEBAR (Live Ticker / Market Selector) */}
+        {/* RIGHT SIDEBAR */}
         <aside className="hidden lg:flex flex-col gap-5 min-h-0 border-l border-white/5 pl-6 max-w-sm">
-          <div className="flex-none flex items-center justify-between">
-             <div className="flex items-center gap-2">
-               <TrendingUp className="w-4 h-4 text-red-500" />
-               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span>
-             </div>
-          </div>
+          <div className="flex-none flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-red-500" /><span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span></div></div>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {marketDeck.map((m) => (
-              <div 
-                key={m.id} 
-                className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
-                    ${isSidebarInteractive 
-                        ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
-                        : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
-                    ${currentIdx === m.id && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
-                `} 
-                onClick={() => {
-                  if(isSidebarInteractive) {
-                      setCurrentIdx(m.id);
-                  }
-                }}
-              >
-                <div className="flex justify-between items-start mb-2">
-                    <span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>
-                    <ExternalLink className="w-3 h-3 text-white/20" />
-                </div>
+              <div key={m.id} className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all ${isSidebarInteractive ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'} ${currentIdx === m.id && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}`} onClick={() => { if(isSidebarInteractive) setCurrentIdx(m.id); }}>
+                <div className="flex justify-between items-start mb-2"><span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span><ExternalLink className="w-3 h-3 text-white/20" /></div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
-                <div className="flex items-center gap-2">
-                    <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
-                    </div>
-                    <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
-                </div>
+                <div className="flex items-center gap-2"><div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} /></div><span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span></div>
               </div>
             ))}
           </div>
         </aside>
       </main>
 
-      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
-          {[1,2,3].map(i => (
-            <React.Fragment key={i}>
-              <div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500">
-                <Zap className="w-3 h-3 text-red-500" />
-                <span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span>
-                <Mic2 className="w-3 h-3 text-blue-400" />
-                <span>Halftime: Bad Bunny apple music show - first solo latino headliner</span>
-                <Music className="w-3 h-3 text-emerald-400" />
-                <span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span>
-                <TrendingUp className="w-3 h-3 text-white" />
-                <span>Super Bowl LX — the 60th NFL Championship game</span>
-              </div>
-            </React.Fragment>
-          ))}
+          {[1,2,3].map(i => (<React.Fragment key={i}><div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500"><Zap className="w-3 h-3 text-red-500" /><span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span><Mic2 className="w-3 h-3 text-blue-400" /><span>Halftime: Bad Bunny apple music show - first solo latino headliner</span><Music className="w-3 h-3 text-emerald-400" /><span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span><TrendingUp className="w-3 h-3 text-white" /><span>Super Bowl LX — the 60th NFL Championship game</span></div></React.Fragment>))}
         </div>
       </footer>
 
@@ -962,9 +802,5 @@ function GameContent() {
 }
 
 export default function App() {
-  return (
-    <WalletConnectionProvider>
-      <GameContent />
-    </WalletConnectionProvider>
-  );
+  return <GameContent />;
 }
