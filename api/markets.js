@@ -3,58 +3,86 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // The specific Super Bowl LX events you requested
+  // Exact list of Polymarket Events you requested
   const SLUGS = [
     "super-bowl-champion-2026-731",
     "super-bowl-lx-mvp",
     "who-will-perform-at-super-bowl-halftime-show",
+    "first-song-at-super-bowl-lx-halftime-show", 
     "super-bowl-lx-gatorade-shower-color",
     "super-bowl-lx-national-anthem-time",
     "super-bowl-lx-coin-toss",
+    "what-songs-will-be-played-at-the-super-bowl-halftime-show",
+    "who-will-attend-the-2026-pro-football-championship",
+    "sup-bowl-national-anthem-ou-119pt5-seconds",
+    "what-will-be-said-during-the-super-bowl",
     "will-bad-bunny-say-fuck-ice-at-the-super-bowl",
+    "how-many-viewers-will-the-super-bowl-have",
+    "last-song-at-2026-pro-football-championship-halftime-show",
+    "super-bowl-lx-safety",
     "bad-bunny-wears-a-dress-at-the-super-bowl",
+    "pro-football-championship-octopus",
     "super-bowl-lx-overtime",
     "scorigami-in-super-bowl-lx",
     "will-super-bowl-lx-be-the-most-viewed-super-bowl-ever",
     "pro-football-championship-player-to-cry-during-national-anthem",
+    "super-bowl-lx-exact-outcome",
+    "super-bowl-lx-first-team-score",
+    "super-bowl-lx-oddeven-total-points",
     "super-bowl-winning-division",
+    "pro-football-championship-big-man-touchdown",
     "super-bowl-lx-coin-toss-team-winner",
+    "super-bowl-lx-coin-toss-winner-and-champion",
     "super-bowl-lx-winning-seed",
     "super-bowl-winning-conference",
     "super-bowl-lx-first-timeout"
   ];
 
   try {
-    // Fetch data for ALL slugs in parallel (Fast!)
+    // 1. Fetch all events in parallel
     const requests = SLUGS.map(slug => 
       fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)
         .then(r => r.json())
-        .catch(e => null) // Ignore errors for individual broken links
+        .catch(e => [])
     );
 
     const results = await Promise.all(requests);
 
-    // Process and format the data for your frontend
+    // 2. Flatten and Format
     const cleanMarkets = results
       .flat()
       .filter(event => event && event.markets && event.markets.length > 0)
       .map(event => {
-        const market = event.markets[0]; // Get the main betting market
-        const outcomes = JSON.parse(market.outcomes); // e.g. ["Seahawks", "Patriots"]
-        const prices = JSON.parse(market.outcomePrices); // e.g. ["0.65", "0.35"]
+        // We take the most active market if multiple exist, or the first one
+        const market = event.markets[0]; 
+        
+        const outcomes = JSON.parse(market.outcomes); // ["Yes", "No"] or ["Seahawks", "Patriots"]
+        const prices = JSON.parse(market.outcomePrices);
+
+        // LOGIC TO FIX NAMES:
+        // If the question is "Winner", we use the Event Title as the main question.
+        // If the question is specific (e.g. "Sam Darnold"), we use that.
+        let mainQuestion = market.question;
+        let subCategory = event.title;
+
+        if (mainQuestion === "Winner" || mainQuestion === "Game Winner") {
+            mainQuestion = event.title; // e.g. "Seahawks vs Patriots"
+            subCategory = "GAME LINES";
+        }
 
         return {
           id: market.id,
-          question: event.title,
-          category: "SUPER BOWL LX", // Hardcoded category for style
+          // This ensures "Sam Darnold" shows up, not just "MVP"
+          question: mainQuestion, 
+          category: subCategory, 
           img: event.image || "https://polymarket.com/images/default-event.png",
           
-          // Real Data for Buttons
-          outcome_yes: outcomes[0],
+          // Button Labels
+          outcome_yes: outcomes[0], // "Yes" or "Seahawks"
           price_yes: Number(prices[0]),
           
-          outcome_no: outcomes[1] || "Field", // Handle multi-choice
-          price_no: Number(prices[1]) || (1 - Number(prices[0])),
+          outcome_no: outcomes[1], // "No" or "Patriots"
+          price_no: Number(prices[1]),
           
           volume: market.volume,
           slug: event.slug
