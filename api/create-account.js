@@ -13,19 +13,18 @@ export default async function handler(req, res) {
       token: process.env.KV_REST_API_TOKEN,
     });
 
-    // 1. Generate New Solana Keypair (Custodial Wallet)
+    // 1. Generate New Solana Keypair (The User's Deposit Wallet)
     const keypair = Keypair.generate();
     const publicKey = keypair.publicKey.toString();
     const secretKey = bs58.encode(keypair.secretKey);
 
-    // 2. Store Securely
-    // We map the public key to the private key for backend signing
+    // 2. Store Private Key Securely (Mapped to Public Key)
     await redis.set(`private_key:${publicKey}`, secretKey);
     
-    // Initialize empty streak history
+    // 3. Initialize History
     await redis.set(`streaks:${publicKey}`, []);
 
-    // 3. Return keys to frontend (User MUST save these)
+    // 4. Return Keys to Client (User MUST save these)
     return res.status(200).json({ 
       success: true,
       publicKey, 
