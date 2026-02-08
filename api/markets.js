@@ -3,59 +3,68 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // The specific Super Bowl LX events you requested
+  const SLUGS = [
+    "super-bowl-champion-2026-731",
+    "super-bowl-lx-mvp",
+    "who-will-perform-at-super-bowl-halftime-show",
+    "super-bowl-lx-gatorade-shower-color",
+    "super-bowl-lx-national-anthem-time",
+    "super-bowl-lx-coin-toss",
+    "will-bad-bunny-say-fuck-ice-at-the-super-bowl",
+    "bad-bunny-wears-a-dress-at-the-super-bowl",
+    "super-bowl-lx-overtime",
+    "scorigami-in-super-bowl-lx",
+    "will-super-bowl-lx-be-the-most-viewed-super-bowl-ever",
+    "pro-football-championship-player-to-cry-during-national-anthem",
+    "super-bowl-winning-division",
+    "super-bowl-lx-coin-toss-team-winner",
+    "super-bowl-lx-winning-seed",
+    "super-bowl-winning-conference",
+    "super-bowl-lx-first-timeout"
+  ];
+
   try {
-    // 1. Fetch Super Bowl Events from Polymarket Gamma API
-    // We search for "Super Bowl" and ensure the market is active.
-    const response = await fetch(
-      'https://gamma-api.polymarket.com/events?limit=10&active=true&closed=false&slug=super-bowl'
+    // Fetch data for ALL slugs in parallel (Fast!)
+    const requests = SLUGS.map(slug => 
+      fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)
+        .then(r => r.json())
+        .catch(e => null) // Ignore errors for individual broken links
     );
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch from Polymarket');
-    }
 
-    const data = await response.json();
+    const results = await Promise.all(requests);
 
-    // 2. Filter & Format Data for your App
-    // We only want the main "Winner" market or interesting prop bets
-    const formattedMarkets = data.map(event => {
-      // Find the main market (usually the first one in the event)
-      const market = event.markets[0]; 
-      
-      // Calculate implied probability from the price
-      // Polymarket prices are 0 to 1. E.g. 0.65 = 65% chance.
-      const outcomes = JSON.parse(market.outcomes);
-      const prices = JSON.parse(market.outcomePrices);
+    // Process and format the data for your frontend
+    const cleanMarkets = results
+      .flat()
+      .filter(event => event && event.markets && event.markets.length > 0)
+      .map(event => {
+        const market = event.markets[0]; // Get the main betting market
+        const outcomes = JSON.parse(market.outcomes); // e.g. ["Seahawks", "Patriots"]
+        const prices = JSON.parse(market.outcomePrices); // e.g. ["0.65", "0.35"]
 
-      return {
-        id: market.id,
-        question: event.title, // e.g. "Super Bowl LVIII Winner"
-        category: "SUPER BOWL LX",
-        // Use the event image from Polymarket
-        img: event.image || "https://polymarket.com/images/default-event.png",
-        // Pass the live odds to the frontend
-        outcome_yes: outcomes[0],
-        price_yes: Number(prices[0]),
-        outcome_no: outcomes[1],
-        price_no: Number(prices[1]),
-        volume: market.volume,
-        slug: event.slug
-      };
-    });
+        return {
+          id: market.id,
+          question: event.title,
+          category: "SUPER BOWL LX", // Hardcoded category for style
+          img: event.image || "https://polymarket.com/images/default-event.png",
+          
+          // Real Data for Buttons
+          outcome_yes: outcomes[0],
+          price_yes: Number(prices[0]),
+          
+          outcome_no: outcomes[1] || "Field", // Handle multi-choice
+          price_no: Number(prices[1]) || (1 - Number(prices[0])),
+          
+          volume: market.volume,
+          slug: event.slug
+        };
+      });
 
-    return res.status(200).json(formattedMarkets);
+    return res.status(200).json(cleanMarkets);
 
   } catch (error) {
     console.error("Polymarket Fetch Error:", error);
-    // Fallback data if API fails (so app doesn't crash)
-    return res.status(200).json([
-      { 
-        id: "fallback-1", 
-        question: "Chiefs vs 49ers (API Limit)", 
-        category: "FALLBACK", 
-        price_yes: 0.55, 
-        img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800" 
-      }
-    ]);
+    return res.status(500).json({ error: "Failed to fetch live odds" });
   }
 }
