@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Exact list of Polymarket Events you requested
+  // Exact list of Polymarket Events (Slugs)
   const SLUGS = [
     "super-bowl-champion-2026-731",
     "super-bowl-lx-mvp",
@@ -39,7 +39,6 @@ export default async function handler(req, res) {
   ];
 
   try {
-    // 1. Fetch all events in parallel
     const requests = SLUGS.map(slug => 
       fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)
         .then(r => r.json())
@@ -48,40 +47,51 @@ export default async function handler(req, res) {
 
     const results = await Promise.all(requests);
 
-    // 2. Flatten and Format
     const cleanMarkets = results
       .flat()
-      .filter(event => event && event.markets && event.markets.length > 0)
-      .map(event => {
-        // We take the most active market if multiple exist, or the first one
-        const market = event.markets[0]; 
+      .filter(event => {
+        // 1. Basic Availability Check
+        if (!event || !event.markets || event.markets.length === 0) return false;
         
-        const outcomes = JSON.parse(market.outcomes); // ["Yes", "No"] or ["Seahawks", "Patriots"]
+        const market = event.markets[0];
+        const prices = JSON.parse(market.outcomePrices);
+        const p1 = Number(prices[0]);
+        const p2 = Number(prices[1]);
+
+        // 2. DATA SANITY CHECK: Filter out 0% or 100% markets (Invalid/Resolved/Broken)
+        // We only want ACTIVE betting markets.
+        if (p1 <= 0 || p1 >= 1 || p2 <= 0 || p2 >= 1) return false;
+
+        // 3. Status Check
+        if (market.closed || market.resolvedBy) return false;
+
+        return true;
+      })
+      .map(event => {
+        const market = event.markets[0]; 
+        const outcomes = JSON.parse(market.outcomes); 
         const prices = JSON.parse(market.outcomePrices);
 
-        // LOGIC TO FIX NAMES:
-        // If the question is "Winner", we use the Event Title as the main question.
-        // If the question is specific (e.g. "Sam Darnold"), we use that.
+        // Logic to ensure Title vs Question is clear
         let mainQuestion = market.question;
         let subCategory = event.title;
 
+        // Clean up redundant titles
         if (mainQuestion === "Winner" || mainQuestion === "Game Winner") {
-            mainQuestion = event.title; // e.g. "Seahawks vs Patriots"
+            mainQuestion = event.title; 
             subCategory = "GAME LINES";
         }
 
         return {
-          id: market.id,
-          // This ensures "Sam Darnold" shows up, not just "MVP"
+          id: market.id, // Use Real Polymarket ID for locking
           question: mainQuestion, 
           category: subCategory, 
           img: event.image || "https://polymarket.com/images/default-event.png",
           
-          // Button Labels
-          outcome_yes: outcomes[0], // "Yes" or "Seahawks"
+          outcome_yes: outcomes[0], 
           price_yes: Number(prices[0]),
           
-          outcome_no: outcomes[1], // "No" or "Patriots"
+          outcome_no: outcomes[1], 
           price_no: Number(prices[1]),
           
           volume: market.volume,
