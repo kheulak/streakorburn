@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, Lock, Menu, X, Trophy, ChevronRight, Wallet2, Zap, Twitter, Coins, 
   ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
-  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle, AlertTriangle, Copy, Key
+  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Layers, PlusCircle, Copy, Key
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -26,8 +26,8 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
 
 // Fallback Data
 const FALLBACK_DECK = [
-  { id: 'fb-1', question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
-  { id: 'fb-2', question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
+  { id: 0, question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
+  { id: 1, question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
 ];
 
 function GameContent() {
@@ -45,9 +45,9 @@ function GameContent() {
   const [isMarketsLoading, setIsMarketsLoading] = useState(true);
   const [streakHistory, setStreakHistory] = useState([]); 
   
-  // USER ACCOUNT STATE
+  // USER ACCOUNT STATE (REPLACES WALLET ADAPTER)
   const [userAddress, setUserAddress] = useState(null);
-  const [userSecret, setUserSecret] = useState(null); 
+  const [userSecret, setUserSecret] = useState(null); // Temporarily store for display
   
   // Balance State
   const [vaultBalance, setVaultBalance] = useState(0.0);
@@ -58,9 +58,9 @@ function GameContent() {
 
   // UI State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showEntryModal, setShowEntryModal] = useState(false); 
-  const [showKeyModal, setShowKeyModal] = useState(false); 
-  const [keysConfirmed, setKeysConfirmed] = useState(false); 
+  const [showEntryModal, setShowEntryModal] = useState(false); // Used for Login/Create
+  const [showKeyModal, setShowKeyModal] = useState(false); // New Account Keys
+  const [keysConfirmed, setKeysConfirmed] = useState(false); // Checkbox state
   const [showDashboard, setShowDashboard] = useState(false); // VAULT
   const [showMyBets, setShowMyBets] = useState(false);     // MY BETS
   
@@ -73,8 +73,9 @@ function GameContent() {
   const [isEventStarted, setIsEventStarted] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
 
-  // --- 1. INITIAL LOAD ---
+  // --- 1. INITIAL LOAD (LOCAL STORAGE) ---
   useEffect(() => {
+    // Check local storage for existing session
     const storedPub = localStorage.getItem('sob_user_pub');
     if (storedPub) {
       setUserAddress(storedPub);
@@ -103,13 +104,13 @@ function GameContent() {
         const res = await fetch('/api/markets');
         const data = await res.json();
         if (data && Array.isArray(data) && data.length > 0) {
-          // Use ID from backend as unique key
-          const indexedData = data.map((item, index) => ({...item, visualIndex: index}));
+          const indexedData = data.map((item, index) => ({...item, id: index}));
           setMarketDeck(indexedData);
-          setIsMarketsLoading(false);
         }
       } catch (error) {
         console.error("Failed to stream markets", error);
+      } finally {
+        // ALWAYS STOP LOADING, EVEN IF FAIL
         setIsMarketsLoading(false);
       }
     }
@@ -139,30 +140,43 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- ACCOUNT ACTIONS ---
-  
+  // --- ACCOUNT CREATION ---
   const handleCreateAccount = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/create-account', { method: 'POST' });
       const data = await res.json();
-      if(data.success) {
+      
+      if (data.success) {
         setUserAddress(data.publicKey);
         setUserSecret(data.secretKey);
+        setKeysConfirmed(false);
+        
+        // Save session
         localStorage.setItem('sob_user_pub', data.publicKey);
+        
         setShowEntryModal(false);
-        setShowKeyModal(true); 
+        setShowKeyModal(true); // Force user to see keys
       } else {
         alert("Failed to create account.");
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleConfirmKeys = () => {
-    if(!keysConfirmed) return alert("Please confirm you saved your key.");
+    if (!keysConfirmed) {
+        alert("You must confirm that you have copied your Private Key.");
+        return;
+    }
+    setShowNewAccountModal(false); // Hide keys
     setShowKeyModal(false);
-    setUserSecret(null); 
-    setShowDashboard(true); 
+    setUserSecret(null); // Clear from memory
+    alert("Account Created! You can now deposit funds.");
+    setShowDashboard(true); // Open vault to show deposit address
   };
 
   const handleLogout = () => {
@@ -182,7 +196,7 @@ function GameContent() {
 
   // --- DEPOSIT CHECK ---
   const handleCheckDeposit = async () => {
-    if(!userAddress) return;
+    if (!userAddress) return;
     setIsLoading(true);
     try {
       const res = await fetch('/api/deposit', {
@@ -191,20 +205,25 @@ function GameContent() {
         body: JSON.stringify({ userAddress })
       });
       const data = await res.json();
-      if(data.success) {
+      if (data.success) {
         setVaultBalance(data.newBalance);
         if (data.newBalance > vaultBalance) {
           alert(`Deposit Detected! New Balance: ${data.newBalance.toFixed(3)} SOL`);
         } else {
-          alert("No new deposits detected yet.");
+          alert("No new deposits detected yet. Please wait a moment.");
         }
       }
-    } catch(e) { alert(e.message); } finally { setIsLoading(false); }
+    } catch (e) {
+      alert("Check failed: " + e.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // --- GAMEPLAY ACTIONS ---
   const handleEnterArena = () => {
     if (!userAddress) return setShowEntryModal(true);
+    
     if (isEventStarted) {
         alert("Event has started! Betting is closed. Viewing My Bets.");
         setShowMyBets(true);
@@ -242,20 +261,11 @@ function GameContent() {
       if (isEventStarted) return alert("Betting Closed. Event Live.");
       
       const currentCard = marketDeck[currentIdx];
-
-      // GUARD: DUPLICATE CHECK
-      // Check if this market ID is already in activePicks
-      const isAlreadyPicked = activePicks.some(p => p.marketId === currentCard.id);
-      if (isAlreadyPicked) {
-          return; // Do nothing if clicked (Visuals handled below)
-      }
-
       const pick = {
           question: currentCard.question,
           outcome: selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no,
           odds: selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no,
-          marketId: currentCard.id,
-          img: currentCard.img // Store image for history
+          marketId: currentCard.id
       };
 
       const updatedPicks = [...activePicks, pick];
@@ -264,7 +274,6 @@ function GameContent() {
       if (updatedPicks.length >= 10) {
           submitStreak(updatedPicks);
       } else {
-          // Loop to next
           setCurrentIdx((prev) => (prev + 1) % marketDeck.length);
       }
   };
@@ -339,6 +348,8 @@ function GameContent() {
     alert("Copied to clipboard!");
   };
 
+  // --- RENDER ---
+
   if (isMarketsLoading) {
       return (
         <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white font-black animate-pulse">
@@ -348,9 +359,6 @@ function GameContent() {
       );
   }
 
-  // Visual Guard: Is current card already in active picks?
-  const currentCard = marketDeck[currentIdx];
-  const isCurrentCardPicked = activePicks.some(p => p.marketId === currentCard.id);
   const isSidebarInteractive = userAddress && gameState === 'playing' && streakStake > 0;
 
   return (
@@ -583,7 +591,7 @@ function GameContent() {
         )}
       </AnimatePresence>
 
-      {/* 3. MY BETS MODAL (UPDATED FOR FULL TICKET) */}
+      {/* 3. MY BETS MODAL */}
       <AnimatePresence>
         {showMyBets && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
@@ -617,18 +625,14 @@ function GameContent() {
                                           {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
                                       </span>
                                   </div>
-                                  {/* RENDER FULL LIST OF BETS */}
-                                  <div className="mt-2 space-y-2">
-                                      {streak.picks.map((p, i) => (
-                                          <div key={i} className="flex items-center gap-3 bg-white/[0.02] p-2 rounded-lg border border-white/[0.05]">
-                                              {p.img && <img src={p.img} className="w-8 h-8 rounded-full object-cover" />}
-                                              <div className="flex-1 min-w-0">
-                                                  <div className="text-[8px] text-neutral-400 truncate uppercase">{p.question}</div>
-                                                  <div className="text-[10px] font-bold text-white">{p.outcome}</div>
-                                              </div>
-                                              <div className="text-[9px] font-mono text-cyan-400">{(p.odds * 100).toFixed(0)}%</div>
+                                  <div className="mt-2 grid grid-cols-2 gap-2">
+                                      {streak.picks.slice(0,4).map((p, i) => (
+                                          <div key={i} className="text-[7px] text-neutral-400 truncate flex justify-between">
+                                              <span>{p.outcome}</span>
+                                              <span className="text-neutral-600">{(p.odds * 100).toFixed(0)}%</span>
                                           </div>
                                       ))}
+                                      {streak.picks.length > 4 && <div className="text-[7px] text-neutral-600 italic">... +{streak.picks.length - 4} more</div>}
                                   </div>
                               </div>
                           </div>
@@ -856,32 +860,20 @@ function GameContent() {
                     <div className="space-y-6">
                       {/* DYNAMIC BUTTONS (LEFT=Outcome 1, RIGHT=Outcome 2) */}
                       <div className="grid grid-cols-2 gap-4">
-                        <button 
-                            onClick={() => handleAction(0)} 
-                            disabled={isLoading || isCurrentCardPicked} 
-                            className={`py-6 rounded-xl text-white font-black text-[12px] uppercase tracking-widest flex flex-col items-center justify-center gap-1 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]
-                                ${isCurrentCardPicked ? 'bg-white/5 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:brightness-125'}
-                            `}
-                        >
+                        <button onClick={() => handleAction(0)} disabled={isLoading} className="py-6 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-[12px] uppercase tracking-widest hover:brightness-125 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]">
                             {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
                                 <>
-                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_yes}</span>
-                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>}
+                                    <span>{marketDeck[currentIdx]?.outcome_yes}</span>
+                                    <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>
                                 </>
                             )}
                         </button>
                         
-                        <button 
-                            onClick={() => handleAction(1)} 
-                            disabled={isLoading || isCurrentCardPicked} 
-                            className={`py-6 rounded-xl text-white font-black text-[12px] uppercase tracking-widest flex flex-col items-center justify-center gap-1 active:scale-95 transition-all
-                                ${isCurrentCardPicked ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-50' : 'bg-white/5 border border-white/10 hover:bg-white/10'}
-                            `}
-                        >
+                        <button onClick={() => handleAction(1)} disabled={isLoading} className="py-6 rounded-xl bg-white/5 border border-white/10 text-white font-black text-[12px] uppercase tracking-widest hover:bg-white/10 flex flex-col items-center justify-center gap-1 active:scale-95 transition-all">
                             {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
                                 <>
-                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_no}</span>
-                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>}
+                                    <span>{marketDeck[currentIdx]?.outcome_no}</span>
+                                    <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>
                                 </>
                             )}
                         </button>
@@ -903,28 +895,24 @@ function GameContent() {
              </div>
           </div>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-            {marketDeck.map((m) => {
-              // Check if market is locked
-              const isLocked = activePicks.some(p => p.marketId === m.id);
-              
-              return (
+            {marketDeck.map((m) => (
               <div 
                 key={m.id} 
                 className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
                     ${isSidebarInteractive 
                         ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
                         : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
-                    ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
+                    ${currentIdx === m.id && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
                 `} 
                 onClick={() => {
                   if(isSidebarInteractive) {
-                      setCurrentIdx(m.visualIndex);
+                      setCurrentIdx(m.id);
                   }
                 }}
               >
                 <div className="flex justify-between items-start mb-2">
                     <span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>
-                    {isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}
+                    <ExternalLink className="w-3 h-3 text-white/20" />
                 </div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
                 <div className="flex items-center gap-2">
@@ -934,7 +922,7 @@ function GameContent() {
                     <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
                 </div>
               </div>
-            )})}
+            ))}
           </div>
         </aside>
       </main>
@@ -974,5 +962,9 @@ function GameContent() {
 }
 
 export default function App() {
-  return <GameContent />;
+  return (
+    <WalletConnectionProvider>
+      <GameContent />
+    </WalletConnectionProvider>
+  );
 }
