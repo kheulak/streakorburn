@@ -9,12 +9,19 @@ export default async function handler(req, res) {
 
   try {
     const { userAddress, amount } = req.body;
-    const redis = Redis.fromEnv();
+    
+    // --- CONNECT USING YOUR SPECIFIC KEYS ---
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
+    // ----------------------------------------
 
     // Check Ledger
     const currentBalance = await redis.get(`balance:${userAddress}`);
+    
     if (!currentBalance || parseFloat(currentBalance) < parseFloat(amount)) {
-      return res.status(403).json({ error: 'INSUFFICIENT FUNDS' });
+      return res.status(403).json({ error: 'INSUFFICIENT FUNDS. Request Denied.' });
     }
 
     const connection = new Connection(process.env.NEXT_PUBLIC_RPC_URL);
@@ -41,7 +48,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: 'success', signature });
 
   } catch (error) {
-    console.error(error);
+    console.error("Withdraw Error:", error);
     return res.status(500).json({ error: error.message });
   }
 }
