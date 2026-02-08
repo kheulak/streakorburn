@@ -29,7 +29,7 @@ import {
 
 // --- CONFIGURATION ---
 // !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
-const HOUSE_WALLET_ADDRESS = "REPLACE_WITH_YOUR_WALLET_ADDRESS"; 
+const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
 // ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
