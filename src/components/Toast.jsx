@@ -4,18 +4,15 @@ import { CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
 
 const ToastItem = ({ id, message, type, onClose }) => {
   useEffect(() => {
-    // Start the 2-second timer
+    // Auto-close after 2 seconds
     const timer = setTimeout(() => {
       onClose(id);
     }, 2000); 
 
-    // Cleanup timer on unmount
+    // Cleanup
     return () => clearTimeout(timer);
-    
-    // 🚨 FIX: We intentionally do NOT include 'onClose' in the dependency array.
-    // Since the main App re-renders every second (countdown), including 'onClose'
-    // would reset this timer constantly, preventing it from ever finishing.
-  }, [id]); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures timer doesn't reset on parent re-renders
 
   const variants = {
     initial: { opacity: 0, y: 20, scale: 0.9 },
@@ -50,7 +47,6 @@ const ToastItem = ({ id, message, type, onClose }) => {
     >
       <div className="flex-shrink-0">{getIcon()}</div>
       <p className="text-xs font-bold text-white flex-1">{message}</p>
-      {/* Manual Close Button */}
       <button onClick={() => onClose(id)} className="text-white/50 hover:text-white transition-colors">
         <X className="w-4 h-4" />
       </button>
