@@ -54,12 +54,20 @@ export default async function handler(req, res) {
         if (!event || !event.markets || event.markets.length === 0) return false;
         
         const market = event.markets[0];
-        const prices = JSON.parse(market.outcomePrices);
+        // Parse prices securely
+        let prices;
+        try {
+            prices = JSON.parse(market.outcomePrices);
+        } catch (e) { return false; }
+
+        if (!prices || prices.length < 2) return false;
+
         const p1 = Number(prices[0]);
         const p2 = Number(prices[1]);
 
         // 2. DATA SANITY CHECK: Filter out 0% or 100% markets (Invalid/Resolved/Broken)
-        // We only want ACTIVE betting markets before the event starts.
+        // We only want ACTIVE betting markets. 
+        // If odds are 0 or 1, the market is effectively closed or broken for betting.
         if (p1 <= 0 || p1 >= 1 || p2 <= 0 || p2 >= 1) return false;
 
         // 3. Status Check
@@ -86,6 +94,7 @@ export default async function handler(req, res) {
           id: market.id, // Use Real Polymarket ID for locking
           question: mainQuestion, 
           category: subCategory, 
+          // Ensure image is bound to this specific event iteration
           img: event.image || "https://polymarket.com/images/default-event.png",
           
           outcome_yes: outcomes[0], 
@@ -103,7 +112,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Polymarket Fetch Error:", error);
-    // Return empty array on error so frontend doesn't crash, just shows loading or empty
     return res.status(500).json({ error: "Failed to fetch live odds" });
   }
 }
