@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, Lock, Menu, X, Trophy, ChevronRight, Wallet2, Zap, Twitter, Coins, 
   ShieldCheck, TrendingUp, Activity, Mic2, Music, User, LogOut, 
-  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle
+  ArrowDownCircle, ArrowUpCircle, History, ExternalLink, CheckCircle, Clock, Layers, PlusCircle, Maximize
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -43,6 +43,7 @@ function GameContent() {
   // STREAK LOGIC STATE
   const [activePicks, setActivePicks] = useState([]); // Stores current 10 picks
   const [streakStake, setStreakStake] = useState(0); // The stake for current streak
+  const [customStake, setCustomStake] = useState(''); // For manual input
   
   // DATA STATE
   const [marketDeck, setMarketDeck] = useState(FALLBACK_DECK);
@@ -81,6 +82,13 @@ function GameContent() {
   useEffect(() => {
     if (walletAddress) {
         refreshUserData();
+    } else {
+        // Clear sensitive data on disconnect
+        setVaultBalance(0);
+        setStreakHistory([]);
+        setShowDashboard(false);
+        setShowEntryModal(false);
+        setShowStakeSelect(false);
     }
   }, [walletAddress]);
 
@@ -138,12 +146,12 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- CORE ACTIONS ---
+  // --- CORE ACTIONS & GUARDS ---
 
   const handleEnterArena = () => {
     if (!walletAddress) {
-      alert("Please connect your wallet first!");
-      return;
+      // Force connection flow
+      return; 
     }
     
     setShowEntryModal(false);
@@ -158,14 +166,23 @@ function GameContent() {
   };
 
   const handleStartStreak = (amount) => {
-      if (amount > vaultBalance) {
-          alert(`Insufficient SOL Balance. Please Deposit.`);
+      if (!walletAddress) return setShowEntryModal(true);
+      
+      const stakeVal = parseFloat(amount);
+      if (isNaN(stakeVal) || stakeVal < 1 || stakeVal > 50) {
+          alert("Stake must be between 1 and 50 SOL");
+          return;
+      }
+
+      if (stakeVal > vaultBalance) {
+          alert(`Insufficient SOL Balance in Vault. Please Deposit.`);
+          setShowStakeSelect(false);
           setShowDashboard(true); 
           return;
       }
       
       // CRITICAL RESET LOGIC
-      setStreakStake(amount);
+      setStreakStake(stakeVal);
       setActivePicks([]); // Clear any previous streak state
       setCurrentIdx(0);   // Reset deck to beginning
       setShowStakeSelect(false);
@@ -174,7 +191,19 @@ function GameContent() {
 
   // --- GAMEPLAY ACTION (Building the Slip) ---
   const handleAction = (selectionIndex) => {
-      // selectionIndex: 0 (Left/Yes), 1 (No/Right)
+      // GUARD: Logged Out
+      if (!walletAddress) {
+          setShowEntryModal(true);
+          return;
+      }
+
+      // GUARD: Zero Stake or No Active Streak
+      if (streakStake <= 0) {
+          setShowStakeSelect(true);
+          return;
+      }
+
+      // GUARD: Event Started
       if (isEventStarted) return alert("Betting Closed. Event Live.");
       
       const currentCard = marketDeck[currentIdx];
@@ -222,6 +251,7 @@ function GameContent() {
           // CRITICAL: Reset Local State AFTER submission
           setActivePicks([]); 
           setStreakStake(0);
+          setCustomStake('');
           setCurrentIdx(0);
 
           setGameState('streak_submitted');
@@ -264,12 +294,19 @@ function GameContent() {
         setDepositAmount('');
         alert("Deposit Successful!");
         
+        // Auto-prompt streak if pre-event
+        if (!isEventStarted) {
+            setShowDashboard(false);
+            setShowStakeSelect(true);
+        }
+        
     } catch (e) { alert("Deposit Failed: " + e.message); } finally { setIsLoading(false); }
   };
 
   const handleWithdraw = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return alert("Invalid amount");
+    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Available Funds");
     
     try {
       setIsLoading(true);
@@ -285,6 +322,10 @@ function GameContent() {
         alert(`Withdrawal Success! Tx: ${data.signature}`);
       } else { throw new Error(data.error); }
     } catch (error) { alert("Withdraw Failed: " + error.message); } finally { setIsLoading(false); }
+  };
+
+  const handleMaxWithdraw = () => {
+      setWithdrawAmount(vaultBalance.toString());
   };
 
   const handleReset = () => {
@@ -328,8 +369,13 @@ function GameContent() {
           </div>
           
           <div className="hidden lg:flex items-center gap-8">
-            {/* NEW BUTTON: START NEW STREAK */}
-            <button onClick={() => {setShowStakeSelect(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
+            <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
+              <Coins className="w-3.5 h-3.5" /> BUY $SOB
+            </button>
+            <button onClick={() => {if (walletAddress) setShowDashboard(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-cyan-400 transition-colors">
+              <History className="w-3.5 h-3.5" /> MY BETS
+            </button>
+            <button onClick={() => {if (walletAddress) setShowStakeSelect(true); else setShowEntryModal(true);}} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white bg-blue-600/20 px-4 py-2 rounded-full hover:bg-blue-600 transition-colors border border-blue-500/30">
               <PlusCircle className="w-3.5 h-3.5" /> START NEW STREAK
             </button>
             <button onClick={() => setShowLiveFeed(true)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 hover:text-red-500 transition-colors">
@@ -382,7 +428,13 @@ function GameContent() {
               </div>
             )}
             
-            <button onClick={() => {setShowStakeSelect(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+              <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
+            </button>
+            <button onClick={() => {if(walletAddress) setShowDashboard(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
+              <History className="w-4 h-4 text-cyan-400" /> MY BETS
+            </button>
+            <button onClick={() => {if(walletAddress) setShowStakeSelect(true); else setShowEntryModal(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
               <PlusCircle className="w-4 h-4 text-cyan-400" /> START NEW STREAK
             </button>
             <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
@@ -418,8 +470,8 @@ function GameContent() {
                   {/* WALLET INFO */}
                   <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                     <div className="flex justify-between mb-2">
-                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Status</span>
-                        <span className="text-[10px] font-bold text-green-400">REAL MONEY VAULT</span>
+                        <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Account</span>
+                        <span className="text-[10px] font-bold text-red-500">REAL MONEY</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Wallet2 className="w-4 h-4 text-cyan-400" />
@@ -441,7 +493,7 @@ function GameContent() {
                               <div className="flex justify-between items-center mb-3">
                                   <div className="flex flex-col">
                                       <span className="text-[9px] font-bold text-neutral-400">{new Date(streak.date).toLocaleDateString()}</span>
-                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">REAL STREAK</span>
+                                      <span className="text-[8px] font-black uppercase tracking-widest text-red-500">LOCKED</span>
                                   </div>
                                   <div className="text-right">
                                       <span className="text-[9px] font-bold text-white block">STAKE: {streak.stake} SOL</span>
@@ -481,12 +533,16 @@ function GameContent() {
                           </button>
                         </div>
                         <div className="flex gap-2">
-                          <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
+                          <div className="relative flex-1">
+                              <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors h-full" />
+                              <button onClick={handleMaxWithdraw} className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] bg-white/10 px-2 py-1 rounded text-white hover:bg-white/20">MAX</button>
+                          </div>
                           <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
                               {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
                               {isLoading ? 'Processing...' : 'Withdraw'}
                           </button>
                         </div>
+                        <span className="text-[9px] text-neutral-500 text-right">Available to Withdraw: {vaultBalance.toFixed(3)} SOL</span>
                       </div>
                   </div>
                   
@@ -516,13 +572,23 @@ function GameContent() {
                     </button>
                  ))}
               </div>
+              <div className="flex gap-2 mb-6">
+                  <input 
+                    type="number" 
+                    placeholder="Custom SOL (1-50)" 
+                    value={customStake} 
+                    onChange={(e) => setCustomStake(e.target.value)} 
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white font-bold"
+                  />
+                  <button onClick={() => handleStartStreak(customStake)} className="px-6 rounded-xl bg-white text-black font-black text-[10px] uppercase">Start</button>
+              </div>
               
               <button onClick={() => setShowStakeSelect(false)} className="text-[10px] font-black text-red-500 uppercase hover:text-white transition-colors">Cancel</button>
             </motion.div>
           </div>
         )}
 
-        {/* ENTRY MODAL (SIMPLIFIED FOR REAL MONEY) */}
+        {/* ENTRY MODAL */}
         {showEntryModal && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
@@ -626,7 +692,7 @@ function GameContent() {
 
                 <div className="flex flex-wrap justify-center gap-4 mt-8">
                   <button 
-                    onClick={() => setShowEntryModal(true)} 
+                    onClick={handleEnterArena} 
                     className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3"
                   >
                     Enter Betting Arena <ChevronRight className="w-4 h-4" />
@@ -736,6 +802,7 @@ function GameContent() {
                 className={`group relative p-4 rounded-2xl bg-white/[0.03] border overflow-hidden backdrop-blur-md hover:border-cyan-500/30 transition-all cursor-pointer ${currentIdx === m.id ? 'border-cyan-500/50 bg-white/[0.05]' : 'border-white/[0.08]'}`} 
                 onClick={() => {
                   if(!isEventStarted) {
+                      if (!walletAddress) { setShowEntryModal(true); return; }
                       setCurrentIdx(m.id);
                       setGameState('playing'); 
                   }
