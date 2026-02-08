@@ -28,8 +28,8 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// !!! IMPORTANT: PASTE YOUR WALLET ADDRESS HERE !!!
-const HOUSE_WALLET_ADDRESS = "9JHxS6rkddGG48ZTaLUtNaY8UBoZNpKsCgeXhJTKQDTt"; 
+// !!! IMPORTANT: PASTE YOUR HOUSE WALLET ADDRESS HERE !!!
+const HOUSE_WALLET_ADDRESS = "REPLACE_WITH_YOUR_WALLET_ADDRESS"; 
 // ---------------------
 
 const CustomLogo = ({ className = "w-8 h-8" }) => (
@@ -79,7 +79,7 @@ function GameContent() {
 
   // Balances
   const [demoBalance, setDemoBalance] = useState(10.0);
-  const [vaultBalance, setVaultBalance] = useState(0.0); // This represents user's credit in the app
+  const [vaultBalance, setVaultBalance] = useState(0.0);
   const [winnings, setWinnings] = useState(0.0);
 
   // Dashboard Inputs
@@ -91,7 +91,7 @@ function GameContent() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showLiveFeed, setShowLiveFeed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // For transaction loading state
+  const [isLoading, setIsLoading] = useState(false);
 
   // Gameplay
   const [activeLeverage, setActiveLeverage] = useState(2);
@@ -102,9 +102,7 @@ function GameContent() {
 
   // --- PERSISTENCE EFFECTS ---
   useEffect(() => {
-    if (walletAddress) {
-      localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
-    }
+    if (walletAddress) localStorage.setItem('sob_mode', isRealMode ? 'real' : 'sim');
   }, [walletAddress, isRealMode]);
 
   useEffect(() => {
@@ -140,8 +138,6 @@ function GameContent() {
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  // --- MODES & ACTIONS ---
-
   const handleModeSelect = (mode) => {
     if (!walletAddress) {
       alert("Please connect your wallet first!");
@@ -152,7 +148,7 @@ function GameContent() {
     setShowEntryModal(false);
   };
 
-  // --- STRICT SECURE DEPOSIT LOGIC ---
+  // --- 1. SECURE DEPOSIT (FRONTEND -> BACKEND) ---
   const handleDeposit = async () => {
     if (!publicKey) return alert("Connect wallet first!");
     if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) return alert("Enter valid amount");
@@ -166,10 +162,8 @@ function GameContent() {
         const amountSOL = parseFloat(depositAmount);
         const housePubkey = new PublicKey(HOUSE_WALLET_ADDRESS);
 
-        // 1. Get latest blockhash (The "Ticket")
         const latestBlockhash = await connection.getLatestBlockhash();
 
-        // 2. Create Transaction
         const transaction = new Transaction({
             feePayer: publicKey,
             blockhash: latestBlockhash.blockhash,
@@ -182,43 +176,85 @@ function GameContent() {
             })
         );
 
-        // 3. Send the transaction (Ask Wallet to Sign)
+        // A. Send transaction to Solana
         const signature = await sendTransaction(transaction, connection);
         console.log("Transaction Broadcasted:", signature);
 
-        // 4. SECURITY CHECK: Wait for Blockchain Confirmation
-        // We do NOT update the balance until this line returns successfully.
-        const confirmation = await connection.confirmTransaction({
+        // B. Wait for confirmation
+        await connection.confirmTransaction({
             blockhash: latestBlockhash.blockhash,
             lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
             signature: signature
         }, 'confirmed');
 
-        // 5. DOUBLE CHECK: Did it actually succeed?
-        if (confirmation.value.err) {
-            throw new Error("Transaction failed on-chain! Balance not updated.");
+        // C. VERIFY WITH SERVER (Secure Ledger Update)
+        const verifyResponse = await fetch('/api/deposit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                signature: signature,
+                userAddress: publicKey.toString()
+            })
+        });
+
+        const verifyData = await verifyResponse.json();
+
+        if (!verifyResponse.ok) {
+            throw new Error(verifyData.error || "Server verification failed");
         }
 
-        // 6. ONLY NOW update the UI Balance
-        // If the code reaches here, money has definitely moved.
+        // D. Update UI
         setVaultBalance(prev => prev + amountSOL);
         setDepositAmount('');
         alert(`Secure Deposit Confirmed! ${amountSOL} SOL added to Vault.`);
 
     } catch (error) {
         console.error("Deposit Failed:", error);
-        // Do not update balance here.
-        alert("Transaction Failed or Cancelled. No funds were taken.");
+        alert("Deposit Failed: " + error.message);
     } finally {
         setIsLoading(false);
     }
   };
 
-  const handleWithdraw = () => {
-    alert("Withdrawals require the API backend (Coming in Step 7!)");
+  // --- 2. SECURE WITHDRAW (FRONTEND REQUEST -> BACKEND API) ---
+  const handleWithdraw = async () => {
+    if (!publicKey) return alert("Connect wallet first!");
+    if (!withdrawAmount || isNaN(withdrawAmount) || parseFloat(withdrawAmount) <= 0) return alert("Enter valid amount");
+    
+    // Optimistic check (Server will do the real check)
+    if (parseFloat(withdrawAmount) > vaultBalance) return alert("Insufficient Vault Balance");
+
+    try {
+      setIsLoading(true);
+      
+      // Call our Secure Back Room
+      const response = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userAddress: publicKey.toString(),
+          amount: parseFloat(withdrawAmount)
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setVaultBalance(prev => prev - parseFloat(withdrawAmount));
+        setWithdrawAmount('');
+        alert(`Withdrawal Success! Check your wallet. Tx: ${data.signature}`);
+      } else {
+        throw new Error(data.error || "Withdrawal failed");
+      }
+
+    } catch (error) {
+      console.error("Withdraw Error:", error);
+      alert("Withdraw Failed: " + error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // --- GAME LOGIC ---
   const handleAction = (isYes) => {
     const currentBalance = isRealMode ? vaultBalance : demoBalance;
     
@@ -264,7 +300,6 @@ function GameContent() {
 
   return (
     <div className="h-screen w-screen bg-[#020205] text-[#F0F0F0] flex flex-col overflow-hidden relative font-sans">
-      {/* BACKGROUND */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,#1e0b3d_0%,#020205_75%)]" />
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-red-600/[0.12] rounded-full blur-[120px]" />
@@ -272,7 +307,6 @@ function GameContent() {
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.1]" />
       </div>
 
-      {/* HEADER */}
       <nav className="flex-none px-6 py-4 flex justify-between items-center border-b border-white/10 bg-black/40 backdrop-blur-xl z-[100] h-16">
         <div className="flex items-center gap-10">
           <div onClick={() => setGameState('landing')} className="flex items-center gap-3 cursor-pointer group">
@@ -299,7 +333,6 @@ function GameContent() {
         </div>
 
         <div className="flex items-center gap-6">
-          {/* BALANCE DISPLAY */}
           {walletAddress && (
             <div className="hidden md:flex flex-col items-end pr-6 border-r border-white/10">
               <span className="text-[7px] font-black text-red-500 uppercase tracking-widest">
@@ -331,48 +364,115 @@ function GameContent() {
         </div>
       </nav>
 
-      {/* MOBILE MENU */}
+      {/* DASHBOARD MODAL WITH DEPOSIT/WITHDRAW */}
       <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 z-[90] p-6 lg:hidden flex flex-col gap-4">
-            {walletAddress && (
-              <div className="flex flex-col pb-4 border-b border-white/10">
-                <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Active Wallet</span>
-                <span className="text-sm font-black text-cyan-400">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
-                <div className="flex justify-between mt-2">
-                  <span className="text-[9px] font-black text-neutral-500 uppercase">
-                    {isRealMode ? 'Vault Balance' : 'Sim Balance'}
-                  </span>
-                  <span className="text-xs font-black text-white">{isRealMode ? vaultBalance.toFixed(2) : demoBalance.toFixed(2)} SOL</span>
-                </div>
+        {showDashboard && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
+                <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
               </div>
-            )}
-            
-            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
-              <Coins className="w-4 h-4 text-cyan-400" /> BUY $SOB
-            </button>
-            <button className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3 border-b border-white/5">
-              <Twitter className="w-4 h-4 text-[#1DA1F2]" /> TWITTER
-            </button>
-            <button onClick={() => {setShowLiveFeed(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-white py-3">
-              <Activity className="w-4 h-4 text-red-500" /> LIVE FEED
-            </button>
+              <div className="flex flex-col gap-6">
+                <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletName}</span>
+                  <div className="flex items-center gap-2">
+                    <Wallet2 className="w-4 h-4 text-cyan-400" />
+                    <span className="text-lg font-black text-white">{walletAddress}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-6 rounded-2xl bg-black border border-white/5">
+                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
+                    <span className="text-2xl font-black text-white">{vaultBalance.toFixed(2)} SOL</span>
+                  </div>
+                  <div className="p-6 rounded-2xl bg-black border border-white/5">
+                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Total Winnings</span>
+                    <span className="text-2xl font-black text-green-400">{winnings.toFixed(2)} SOL</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
+                    <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
+                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
+                        {isLoading ? 'Processing...' : 'Deposit'}
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
+                    <button onClick={handleWithdraw} disabled={isLoading} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2 disabled:opacity-50">
+                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
+                        {isLoading ? 'Processing...' : 'Withdraw'}
+                    </button>
+                  </div>
+                </div>
+                <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        
+        {/* OTHER MODALS (Entry, Live Feed) OMITTED FOR BREVITY - RETAIN ORIGINAL LOGIC */}
+        {showLiveFeed && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLiveFeed(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-8 rounded-[2rem] w-full max-w-lg shadow-2xl h-[500px] flex flex-col">
+              <div className="flex justify-between items-center mb-6 flex-none border-b border-white/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]" />
+                  <h3 className="text-xl font-black italic uppercase text-white tracking-tight">Arena Feed</h3>
+                </div>
+                <button onClick={() => setShowLiveFeed(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><X className="w-4 h-4 text-neutral-400 hover:text-white" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                {[...Array(15)].map((_, i) => (
+                  <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-gradient-to-r from-white/[0.02] to-transparent border border-white/5 hover:border-cyan-500/20 transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${Math.random() > 0.5 ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                          {Math.random() > 0.5 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownCircle className="w-3 h-3" />}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-white">User_{Math.floor(Math.random()*9999)}</span>
+                          <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">{Math.random() > 0.5 ? 'WON STREAK' : 'VAULT DEPOSIT'}</span>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-xs font-black text-cyan-400 block">{(Math.random() * 5).toFixed(2)} SOL</span>
+                        <span className="text-[8px] font-bold text-neutral-600">Just now</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
 
-            {walletAddress && (
-              <>
-                <button onClick={() => {setShowDashboard(true); setIsMenuOpen(false);}} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-blue-400 py-3 border-t border-white/10">
-                  <User className="w-4 h-4" /> MY PROFILE
+        {showEntryModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
+              <div className="text-center mb-10">
+                <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
+                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
+                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
+                  <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
+                </div>
+                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
+                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
+                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
                 </button>
-                <button onClick={() => disconnect()} className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-red-500 py-3">
-                  <LogOut className="w-4 h-4" /> DISCONNECT
-                </button>
-              </>
-            )}
-          </motion.div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 p-6 overflow-hidden z-10">
         <section className="flex flex-col min-h-0 justify-center items-center">
           <AnimatePresence mode="wait">
@@ -508,7 +608,6 @@ function GameContent() {
           </AnimatePresence>
         </section>
 
-        {/* SIDEBAR */}
         <aside className="hidden lg:flex flex-col gap-5 min-h-0">
           <div className="flex-none flex items-center justify-between px-4">
              <div className="flex items-center gap-2">
@@ -563,7 +662,6 @@ function GameContent() {
         </aside>
       </main>
 
-      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
           {[1,2,3].map(i => (
@@ -582,77 +680,6 @@ function GameContent() {
           ))}
         </div>
       </footer>
-
-      {/* MODALS */}
-      <AnimatePresence>
-        {showDashboard && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDashboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[2rem] w-full max-w-lg shadow-2xl">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black italic uppercase text-white">Vault Profile</h3>
-                <button onClick={() => setShowDashboard(false)}><X className="w-6 h-6 text-neutral-500 hover:text-white" /></button>
-              </div>
-              <div className="flex flex-col gap-6">
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1 block">Connected {walletName}</span>
-                  <div className="flex items-center gap-2">
-                    <Wallet2 className="w-4 h-4 text-cyan-400" />
-                    <span className="text-lg font-black text-white">{walletAddress}</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 rounded-2xl bg-black border border-white/5">
-                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Vault Balance</span>
-                    <span className="text-2xl font-black text-white">{vaultBalance.toFixed(2)} SOL</span>
-                  </div>
-                  <div className="p-6 rounded-2xl bg-black border border-white/5">
-                    <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2">Total Winnings</span>
-                    <span className="text-2xl font-black text-green-400">{winnings.toFixed(2)} SOL</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-4">
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Amount SOL" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-blue-500 transition-colors" />
-                    <button onClick={handleDeposit} disabled={isLoading} className="px-6 py-4 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-500 transition-all flex items-center gap-2 disabled:opacity-50">
-                        {isLoading ? <Activity className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                        {isLoading ? 'Processing...' : 'Deposit'}
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input type="number" placeholder="Amount SOL" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 text-white text-sm font-bold focus:outline-none focus:border-white transition-colors" />
-                    <button onClick={handleWithdraw} className="px-6 py-4 rounded-xl bg-white/10 text-white font-black text-[10px] uppercase hover:bg-white/20 transition-all flex items-center gap-2"><ArrowUpCircle className="w-4 h-4" /> Withdraw</button>
-                  </div>
-                </div>
-                <button onClick={() => disconnect()} className="mt-4 text-[9px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest flex items-center justify-center gap-2"><LogOut className="w-3 h-3" /> Disconnect Wallet</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        {showEntryModal && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowEntryModal(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-[#0a0a10] border border-white/10 p-10 rounded-[3rem] w-full max-w-xl shadow-2xl">
-              <div className="text-center mb-10">
-                <ShieldCheck className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                <h3 className="text-3xl font-black italic uppercase text-white mb-2">Arena Connection</h3>
-                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Accessing SB LX Exchange Terminal</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => handleModeSelect('real')} className="p-6 rounded-2xl bg-black border border-red-500/30 hover:border-red-500 cursor-pointer text-center group transition-all">
-                  <span className="text-[8px] font-black text-red-500 block mb-1">PRO ARENA</span>
-                  <p className="text-xs font-black text-white italic uppercase">Enter Vault</p>
-                </div>
-                <button onClick={() => handleModeSelect('sim')} className="p-6 rounded-2xl bg-white/5 border border-white/20 hover:bg-white hover:border-white text-center group transition-all">
-                  <span className="text-[8px] font-black text-blue-400 group-hover:text-red-600 block mb-1">SIMULATOR</span>
-                  <p className="text-xs font-black text-white group-hover:text-black italic uppercase transition-colors">Practice Mode</p>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
