@@ -26,8 +26,8 @@ const CustomLogo = ({ className = "w-8 h-8" }) => (
 
 // Fallback Data
 const FALLBACK_DECK = [
-  { id: 0, question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
-  { id: 1, question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
+  { id: 'fb-1', question: "Sam Darnold", category: "SUPER BOWL MVP", img: "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?q=80&w=800", outcome_yes: "Yes", price_yes: 0.44, outcome_no: "No", price_no: 0.56 },
+  { id: 'fb-2', question: "Seahawks vs Patriots", category: "GAME WINNER", img: "https://images.unsplash.com/photo-1628230538965-c3f25c76063b?q=80&w=800", outcome_yes: "Seahawks", price_yes: 0.55, outcome_no: "Patriots", price_no: 0.45 }
 ];
 
 export default function App() {
@@ -61,8 +61,8 @@ export default function App() {
   const [showEntryModal, setShowEntryModal] = useState(false); 
   const [showKeyModal, setShowKeyModal] = useState(false); 
   const [keysConfirmed, setKeysConfirmed] = useState(false); 
-  const [showDashboard, setShowDashboard] = useState(false); 
-  const [showMyBets, setShowMyBets] = useState(false);     
+  const [showDashboard, setShowDashboard] = useState(false); // VAULT
+  const [showMyBets, setShowMyBets] = useState(false);     // MY BETS
   
   const [showLiveFeed, setShowLiveFeed] = useState(false);
   const [showStakeSelect, setShowStakeSelect] = useState(false);
@@ -106,7 +106,7 @@ export default function App() {
         const data = await res.json();
         
         if (isMounted && data && Array.isArray(data) && data.length > 0) {
-          // Use ID from backend as unique key for data integrity
+          // Use ID from backend as unique key and assign visual index
           const indexedData = data.map((item, index) => ({...item, visualIndex: index}));
           setMarketDeck(indexedData);
         }
@@ -251,11 +251,11 @@ export default function App() {
       
       const currentCard = marketDeck[currentIdx];
 
-      // GUARD: DUPLICATE CHECK
+      // GUARD: DUPLICATE CHECK (STREAK LOCKING)
       // Check if this market ID is already in activePicks
       const isAlreadyPicked = activePicks.some(p => p.marketId === currentCard.id);
       if (isAlreadyPicked) {
-          return; // Do nothing if clicked (Visuals handled below)
+          return; // Prevent adding again
       }
 
       const pick = {
@@ -263,7 +263,7 @@ export default function App() {
           outcome: selectionIndex === 0 ? currentCard.outcome_yes : currentCard.outcome_no,
           odds: selectionIndex === 0 ? currentCard.price_yes : currentCard.price_no,
           marketId: currentCard.id,
-          img: currentCard.img // Store image for history
+          img: currentCard.img // Store image for My Bets display
       };
 
       const updatedPicks = [...activePicks, pick];
@@ -346,7 +346,14 @@ export default function App() {
     alert("Copied to clipboard!");
   };
 
-  if (isMarketsLoading) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white font-black animate-pulse">LOADING...</div>;
+  if (isMarketsLoading) {
+      return (
+        <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white font-black animate-pulse">
+            <Activity className="w-12 h-12 text-cyan-500 mb-4 animate-spin" />
+            <span className="tracking-widest">LOADING PLATFORM...</span>
+        </div>
+      );
+  }
 
   // Visual Guard: Is current card already in active picks?
   const currentCard = marketDeck[currentIdx];
@@ -617,6 +624,7 @@ export default function App() {
                                           {isEventStarted ? 'LIVE TRACKING' : 'PENDING START'}
                                       </span>
                                   </div>
+                                  {/* RENDER FULL LIST OF BETS */}
                                   <div className="mt-2 space-y-2">
                                       {streak.picks.map((p, i) => (
                                           <div key={i} className="flex items-center gap-3 bg-white/[0.02] p-2 rounded-lg border border-white/[0.05]">
@@ -765,9 +773,38 @@ export default function App() {
                   <Activity className="w-3 h-3 text-red-500 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-widest">Exchange: Seahawks vs Patriots</span>
                 </div>
-                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span></h1>
+                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">
+                  SEAHAWKS.<br/>PATRIOTS.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">SUPER BOWL LX.</span>
+                </h1>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto mb-10">
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-cyan-400/50 transition-colors">
+                    <span className="text-[10px] font-black text-cyan-400 block mb-2">STEP 01</span>
+                    <p className="text-xs font-bold text-neutral-400">Connect Wallet & Select Mode.</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-red-500/50 transition-colors">
+                    <span className="text-[10px] font-black text-red-500 block mb-2">STEP 02</span>
+                    <p className="text-xs font-bold text-neutral-400">Select Stake & Start 10-Streak.</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:border-purple-500/50 transition-colors">
+                    <span className="text-[10px] font-black text-purple-500 block mb-2">STEP 03</span>
+                    <p className="text-xs font-bold text-neutral-400">Win 10/10 to 3x your Stake.</p>
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap justify-center gap-4 mt-8">
-                  <button onClick={handleEnterArena} className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3">Enter Betting Arena <ChevronRight className="w-4 h-4" /></button>
+                  <button 
+                    onClick={handleEnterArena} 
+                    className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3"
+                  >
+                    Enter Betting Arena <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-6 px-6 border-l border-white/10">
+                    <div className="flex flex-col items-start">
+                      <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Kickoff Event</span>
+                      <span className="text-xl font-black tabular-nums text-white">{countdown.h}H {countdown.m}M {countdown.s}S</span>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -779,23 +816,52 @@ export default function App() {
                      {/* DYNAMIC IMAGE FROM API */}
                      {marketDeck[currentIdx]?.img && <img src={marketDeck[currentIdx].img} className="absolute inset-0 w-full h-full object-cover opacity-60" />}
                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                     
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">{currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}</div>
-                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">{marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%</span>
+                       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/10">
+                         {currentIdx === 2 || currentIdx === 5 ? <Music className="w-8 h-8 text-white/50" /> : <Trophy className="w-8 h-8 text-white/50" />}
+                       </div>
+                       
+                       {/* LIVE ODDS PILL */}
+                       <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 mb-2 bg-black/50 px-3 py-1 rounded-full border border-cyan-500/30">
+                         {marketDeck[currentIdx]?.outcome_yes}: {(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}%
+                       </span>
                        <span className="text-[8px] font-bold text-white/30 mt-2">POLYMARKET DATA</span>
                      </div>
+                     <div className="absolute inset-0 border-r border-white/5" />
                   </div>
 
                   <div className="flex-1 p-8 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-6 border-b border-white/10 pb-6">
-                        <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30"><Flame className="w-5 h-5 text-red-500" /></div><div><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span><span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span></div></div>
-                        <div className="text-right"><span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span><span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span></div>
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center border border-red-500/30">
+                            <Flame className="w-5 h-5 text-red-500" />
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Building Streak</span>
+                            <span className="text-2xl font-black text-white italic tabular-nums">{activePicks.length}/10</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block">Stake</span>
+                            <span className="text-xl font-black text-green-400 tabular-nums">{streakStake} SOL</span>
+                        </div>
                       </div>
-                      <div className="min-h-[120px]"><span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">{marketDeck[currentIdx]?.category}</span><h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">{marketDeck[currentIdx]?.question}</h2></div>
+
+                      {/* MAIN QUESTION DISPLAY */}
+                      <div className="min-h-[120px]">
+                        <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2 block">
+                            {marketDeck[currentIdx]?.category}
+                        </span>
+                        <h2 className="text-3xl md:text-4xl font-black italic uppercase leading-tight text-white tracking-tighter">
+                          {marketDeck[currentIdx]?.question}
+                        </h2>
+                      </div>
                     </div>
 
                     <div className="space-y-6">
+                      {/* DYNAMIC BUTTONS (LEFT=Outcome 1, RIGHT=Outcome 2) */}
                       <div className="grid grid-cols-2 gap-4">
                         <button 
                             onClick={() => handleAction(0)} 
@@ -804,8 +870,14 @@ export default function App() {
                                 ${isCurrentCardPicked ? 'bg-white/5 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:brightness-125'}
                             `}
                         >
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_yes}</span>{!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>}</>)}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
+                                <>
+                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_yes}</span>
+                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_yes * 100).toFixed(0)}% PROB</span>}
+                                </>
+                            )}
                         </button>
+                        
                         <button 
                             onClick={() => handleAction(1)} 
                             disabled={isLoading || isCurrentCardPicked} 
@@ -813,7 +885,12 @@ export default function App() {
                                 ${isCurrentCardPicked ? 'bg-white/5 border-white/5 cursor-not-allowed opacity-50' : 'bg-white/5 border border-white/10 hover:bg-white/10'}
                             `}
                         >
-                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (<><span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_no}</span>{!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>}</>)}
+                            {isLoading ? <Activity className="w-5 h-5 animate-spin" /> : (
+                                <>
+                                    <span>{isCurrentCardPicked ? 'ALREADY BETTED' : marketDeck[currentIdx]?.outcome_no}</span>
+                                    {!isCurrentCardPicked && <span className="text-[9px] opacity-70">{(marketDeck[currentIdx]?.price_no * 100).toFixed(0)}% PROB</span>}
+                                </>
+                            )}
                         </button>
                       </div>
                     </div>
@@ -824,26 +901,68 @@ export default function App() {
           </AnimatePresence>
         </section>
         
-        {/* RIGHT SIDEBAR */}
+        {/* RIGHT SIDEBAR (Live Ticker / Market Selector) */}
         <aside className="hidden lg:flex flex-col gap-5 min-h-0 border-l border-white/5 pl-6 max-w-sm">
-          <div className="flex-none flex items-center justify-between"><div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-red-500" /><span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span></div></div>
+          <div className="flex-none flex items-center justify-between">
+             <div className="flex items-center gap-2">
+               <TrendingUp className="w-4 h-4 text-red-500" />
+               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Live Markets</span>
+             </div>
+          </div>
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
             {marketDeck.map((m) => {
+              // Check if market is locked
               const isLocked = activePicks.some(p => p.marketId === m.id);
+              
               return (
-              <div key={m.id} className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all ${isSidebarInteractive ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'} ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}`} onClick={() => { if(isSidebarInteractive) setCurrentIdx(m.visualIndex); }}>
-                <div className="flex justify-between items-start mb-2"><span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>{isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}</div>
+              <div 
+                key={m.id} 
+                className={`group relative p-4 rounded-2xl border overflow-hidden backdrop-blur-md transition-all 
+                    ${isSidebarInteractive 
+                        ? 'border-white/[0.08] hover:border-cyan-500/30 cursor-pointer' 
+                        : 'border-white/[0.05] opacity-40 grayscale pointer-events-none cursor-not-allowed'}
+                    ${currentIdx === m.visualIndex && isSidebarInteractive ? 'border-cyan-500/50 bg-white/[0.05]' : 'bg-white/[0.03]'}
+                `} 
+                onClick={() => {
+                  if(isSidebarInteractive) {
+                      setCurrentIdx(m.visualIndex);
+                  }
+                }}
+              >
+                <div className="flex justify-between items-start mb-2">
+                    <span className="text-[8px] font-bold text-cyan-400 uppercase">{m.category}</span>
+                    {isLocked ? <Lock className="w-3 h-3 text-red-500" /> : <ExternalLink className="w-3 h-3 text-white/20" />}
+                </div>
                 <h4 className="text-xs font-bold text-white mb-3 leading-tight line-clamp-2">{m.question}</h4>
-                <div className="flex items-center gap-2"><div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} /></div><span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span></div>
+                <div className="flex items-center gap-2">
+                    <div className="h-1 flex-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500" style={{ width: `${m.price_yes * 100}%` }} />
+                    </div>
+                    <span className="text-[8px] font-black text-white">{(m.price_yes * 100).toFixed(0)}%</span>
+                </div>
               </div>
             )})}
           </div>
         </aside>
       </main>
 
+      {/* FOOTER */}
       <footer className="flex-none bg-black border-t border-white/10 py-3 overflow-hidden z-[100] h-12">
         <div className="flex gap-24 items-center animate-ticker whitespace-nowrap">
-          {[1,2,3].map(i => (<React.Fragment key={i}><div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500"><Zap className="w-3 h-3 text-red-500" /><span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span><Mic2 className="w-3 h-3 text-blue-400" /><span>Halftime: Bad Bunny apple music show - first solo latino headliner</span><Music className="w-3 h-3 text-emerald-400" /><span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span><TrendingUp className="w-3 h-3 text-white" /><span>Super Bowl LX — the 60th NFL Championship game</span></div></React.Fragment>))}
+          {[1,2,3].map(i => (
+            <React.Fragment key={i}>
+              <div className="flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.4em] text-neutral-500">
+                <Zap className="w-3 h-3 text-red-500" />
+                <span>SB LX: Seahawks vs Patriots - A 2015 Rematch at Levi's Stadium</span>
+                <Mic2 className="w-3 h-3 text-blue-400" />
+                <span>Halftime: Bad Bunny apple music show - first solo latino headliner</span>
+                <Music className="w-3 h-3 text-emerald-400" />
+                <span>Opening: Charlie Puth national anthem and Brandi Carlile "America the Beautiful"</span>
+                <TrendingUp className="w-3 h-3 text-white" />
+                <span>Super Bowl LX — the 60th NFL Championship game</span>
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       </footer>
 
