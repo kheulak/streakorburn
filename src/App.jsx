@@ -797,7 +797,7 @@ export default function App() {
                   <Activity className="w-3 h-3 text-red-500 animate-pulse" />
                   <span className="text-[9px] font-black uppercase tracking-widest">Exchange: Seahawks vs Patriots</span>
                 </div>
-                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">UPDATING FOR <br/>OUR NEXT EVENT.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">STAY TUNED !</span></h1>
+                <h1 className="text-6xl md:text-8xl lg:text-[7rem] font-black italic tracking-tighter leading-[0.85] mb-8 uppercase text-white">UPDATING FOR <br/>OUR NEXT EVENT.<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-white to-blue-500">STAY TUNED!</span></h1>
                 <div className="flex flex-wrap justify-center gap-4 mt-8">
                   <button onClick={handleEnterArena} className="px-10 py-5 bg-white text-black rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-3">Enter Betting Arena <ChevronRight className="w-4 h-4" /></button>
                 </div>
